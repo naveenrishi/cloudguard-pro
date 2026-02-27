@@ -1,15 +1,578 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// CloudGuard Pro - Production Database Schema
+// This is your Prisma schema file
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ==================== USERS & AUTHENTICATION ====================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  
+  // MFA Fields
+  mfaEnabled     Boolean  @default(false)
+  mfaSecret      String?  // TOTP secret (encrypted)
+  mfaBackupCodes String[] // Recovery codes (hashed)
+  
+  // Security
+  loginAttempts Int      @default(0)
+  lockedUntil   DateTime?
+  lastLoginAt   DateTime?
+  lastLoginIP   String?
+  lastLoginDevice String?
+  
+  // Email Verification
+  verificationToken  String?   @unique
+  verificationExpiry DateTime?
+  
+  // Password Reset
+  resetToken  String?   @unique
+  resetExpiry DateTime?
+  
+  // Password History (prevent reuse)
+  passwordHistory String[] @default([])
+  
+  // Role & Permissions
+  role String @default("user") // user, admin
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  cloudAccounts      CloudAccount[]
+  budgets            Budget[]
+  recommendations    Recommendation[]
+  scheduledDeletions ScheduledDeletion[]
+  auditLogs          AuditLog[]
+  apiKeys            ApiKey[]
+  sessions           Session[]
+  healthEvents       HealthEvent[]
+  resourceRetentions ResourceRetention[]
+  
+  @@index([email])
+  @@index([verificationToken])
+  @@index([resetToken])
+}
+
+// ==================== SESSION MANAGEMENT ====================
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  ipAddress    String
+  userAgent    String
+  deviceId     String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([refreshToken])
+  @@index([expiresAt])
+}
+
+// ==================== API KEYS ====================
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String    // User-defined name
+  keyHash    String    @unique // Hashed API key
+  keyPrefix  String    // First 8 chars for identification
+  scopes     String[]  @default([]) // Permissions: ["read", "write", "delete"]
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([keyHash])
+}
+
+// ==================== AUDIT LOGGING ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String   // LOGIN, LOGOUT, MFA_ENABLED, CLOUD_ACCOUNT_ADDED, RESOURCE_DELETED, etc.
+  resource   String?  // What was affected
+  resourceId String?  // ID of the resource
+  ipAddress  String
+  userAgent  String
+  metadata   Json?    // Additional context
+  success    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
+// ==================== CLOUD ACCOUNTS ====================
+
+model CloudAccount {
+  id          String   @id @default(uuid())
+  userId      String
+  provider    String   // aws, azure, gcp
+  accountName String
+  accountId   String   // AWS Account ID, Azure Subscription ID, GCP Project ID
+  
+  // Connection Status
+  isConnected Boolean  @default(false)
+  lastSyncAt  DateTime?
+  
+  // Demo Mode Support
+  isDemo      Boolean  @default(false)
+  
+  // AWS Credentials (IAM Role)
+  awsRoleArn    String?
+  awsExternalId String? // Encrypted
+  
+  // Azure Credentials (Service Principal)
+  azureTenantId     String?
+  azureClientId     String?
+  azureClientSecret String? // Encrypted with AES-256-GCM
+  
+  // GCP Credentials (Service Account)
+  gcpServiceAccountKey String? // Encrypted JSON key
+  
+  // Metadata
+  region      String?
+  tags        Json?    @default("{}")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  costData            CostData[]
+  recommendations     Recommendation[]
+  retentionPolicies   RetentionPolicy[]
+  scheduledDeletions  ScheduledDeletion[]
+  errorDetections     ErrorDetection[]
+  resourceSchedules   ResourceSchedule[]
+  nukeAccounts        NukeAccount[]
+  
+  @@unique([userId, provider, accountId])
+  @@index([userId])
+  @@index([provider])
+}
+
+// ==================== COST DATA ====================
+
+model CostData {
+  id             String   @id @default(uuid())
+  cloudAccountId String
+  date           DateTime @db.Date
+  service        String   // EC2, S3, Lambda, etc.
+  region         String?
+  costAmount     Float
+  currency       String   @default("USD")
+  usageType      String?
+  tags           Json?    @default("{}")
+  
+  createdAt DateTime @default(now())
+  
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@unique([cloudAccountId, date, service, region])
+  @@index([cloudAccountId, date])
+  @@index([date])
+}
+
+// ==================== RECOMMENDATIONS ====================
+
+model Recommendation {
+  id             String   @id @default(uuid())
+  userId         String
+  cloudAccountId String
+  type           String   // rightsizing, reserved_instances, unused_resources, etc.
+  title          String
+  description    String   @db.Text
+  estimatedSavings Float
+  priority       String   // high, medium, low
+  status         String   @default("pending") // pending, applied, dismissed
+  resourceId     String?
+  resourceType   String?
+  metadata       Json?    @default("{}")
+  
+  appliedAt  DateTime?
+  dismissedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([cloudAccountId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==================== RETENTION POLICIES (NUKE AUTOMATION) ====================
+
+model RetentionPolicy {
+  id             String   @id @default(uuid())
+  cloudAccountId String
+  name           String
+  description    String?  @db.Text
+  
+  // Policy Rules
+  resourceType   String   // ec2, s3, rds, etc.
+  retentionDays  Int      // Delete resources older than X days
+  tagFilters     Json     @default("{}") // {"Environment": "dev", "Owner": "team-a"}
+  
+  // Safety Rules
+  safetyRules    Json     @default("{}") // {"excludeTags": ["production", "critical"]}
+  
+  // Schedule
+  enabled        Boolean  @default(true)
+  cronSchedule   String?  // "0 2 * * *" (2 AM daily)
+  
+  // Approval Settings
+  requireApproval Boolean @default(true)
+  approvalDays    Int     @default(7) // Send warning email 7 days before deletion
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([cloudAccountId])
+  @@index([enabled])
+}
+
+// ==================== SCHEDULED DELETIONS ====================
+
+model ScheduledDeletion {
+  id             String   @id @default(uuid())
+  userId         String
+  cloudAccountId String
+  
+  // Resource Details
+  resourceId     String
+  resourceType   String
+  resourceName   String?
+  resourceTags   Json?    @default("{}")
+  
+  // Scheduling
+  scheduledFor   DateTime
+  warningEmailSent Boolean @default(false)
+  warningEmailSentAt DateTime?
+  
+  // Approval Workflow
+  status         String   @default("pending") // pending, approved, rejected, executed, failed
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedBy     String?
+  rejectedAt     DateTime?
+  rejectionReason String?  @db.Text
+  
+  // Execution
+  executedAt     DateTime?
+  executionStatus String?
+  executionError  String?  @db.Text
+  
+  // Cost Savings
+  estimatedMonthlySavings Float?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([cloudAccountId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+// ==================== ERROR DETECTION ====================
+
+model ErrorDetection {
+  id             String   @id @default(uuid())
+  cloudAccountId String
+  
+  // Error Details
+  errorType      String   // config_drift, security_vulnerability, health_issue, etc.
+  severity       String   // critical, high, medium, low
+  title          String
+  description    String   @db.Text
+  
+  // Resource Affected
+  resourceId     String?
+  resourceType   String?
+  service        String?
+  region         String?
+  
+  // Remediation
+  remediationSteps String?  @db.Text
+  officialDocsUrl  String?
+  canAutoRemediate Boolean  @default(false)
+  
+  // Status
+  status         String   @default("open") // open, in_progress, resolved, ignored
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  
+  // Metadata
+  metadata       Json?    @default("{}")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([cloudAccountId])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==================== RESOURCE SCHEDULING ====================
+
+model ResourceSchedule {
+  id             String   @id @default(uuid())
+  cloudAccountId String
+  
+  // Resource
+  resourceId     String
+  resourceType   String   // ec2, rds, etc.
+  resourceName   String?
+  
+  // Schedule
+  action         String   // start, stop
+  cronExpression String   // "0 18 * * 1-5" (6 PM weekdays)
+  timezone       String   @default("UTC")
+  
+  // Status
+  enabled        Boolean  @default(true)
+  lastExecutedAt DateTime?
+  lastExecutionStatus String?
+  
+  // Cost Savings
+  estimatedMonthlySavings Float?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([cloudAccountId])
+  @@index([enabled])
+}
+
+// ==================== BUDGETS & ALERTS ====================
+
+model Budget {
+  id             String   @id @default(uuid())
+  userId         String
+  name           String
+  amount         Float
+  period         String   // monthly, quarterly, yearly
+  currency       String   @default("USD")
+  
+  // Alert Thresholds
+  alertThresholds Float[]  @default([50, 80, 100]) // Alert at 50%, 80%, 100%
+  
+  // Filters
+  cloudProvider  String?  // aws, azure, gcp (null = all)
+  service        String?  // EC2, S3, etc. (null = all)
+  
+  // Notifications
+  emailNotifications Boolean @default(true)
+  slackWebhook       String?
+  
+  // Status
+  currentSpend   Float    @default(0)
+  lastCheckedAt  DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// ==================== SERVICENOW INTEGRATION ====================
+
+model ServiceNowTicket {
+  id             String   @id @default(uuid())
+  cloudAccountId String?
+  
+  // Ticket Details
+  ticketNumber   String   @unique
+  title          String
+  description    String   @db.Text
+  priority       String   // critical, high, medium, low
+  status         String   // open, in_progress, resolved, closed
+  
+  // Linking
+  errorDetectionId String?
+  resourceId       String?
+  
+  // Sync
+  lastSyncedAt   DateTime?
+  metadata       Json?    @default("{}")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([ticketNumber])
+  @@index([status])
+}
+
+// ==================== HEALTH EVENTS ====================
+
+model HealthEvent {
+  id          String   @id @default(uuid())
+  externalId  String   @unique
+  userId      String
+  provider    String   // aws, azure, gcp
+  service     String
+  region      String
+  status      String   // active, resolved
+  severity    String   // critical, major, minor
+  title       String
+  description String   @db.Text
+  startTime   DateTime
+  endTime     DateTime?
+  url         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([provider])
+}
+
+// ==================== NUKE AUTOMATION ====================
+
+model NukeAccount {
+  id             String   @id @default(uuid())
+  accountName    String   // "Devops Sandbox", "App Dev Training", etc.
+  accountId      String
+  cloudAccountId String   // Link to CloudAccount
+  nukeType       String   // "monthly", "custom"
+  scheduleDay    Int      @default(1) // Day of month to run (1-28)
+  notificationDays Int    @default(5) // Days before to send notification
+  enabled        Boolean  @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  cloudAccount CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  nukeRuns     NukeRun[]
+  retentions   ResourceRetention[]
+  
+  @@unique([cloudAccountId, accountName])
+  @@index([enabled, nextRunAt])
+}
+
+model NukeRun {
+  id            String   @id @default(uuid())
+  nukeAccountId String
+  runType       String   // "dry-run", "live"
+  status        String   // "scheduled", "running", "completed", "failed"
+  scheduledFor  DateTime
+  startedAt     DateTime?
+  completedAt   DateTime?
+  
+  // Statistics
+  totalResources     Int      @default(0)
+  retainedResources  Int      @default(0)
+  deletedResources   Int      @default(0)
+  failedResources    Int      @default(0)
+  
+  // Results
+  resourcesScanned   Json?    @default("{}")
+  resourcesDeleted   Json?    @default("{}")
+  errors             Json?    @default("{}")
+  
+  // Approval
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectedBy    String?
+  rejectedAt    DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  nukeAccount NukeAccount @relation(fields: [nukeAccountId], references: [id], onDelete: Cascade)
+  
+  @@index([nukeAccountId, status])
+  @@index([scheduledFor])
+}
+
+model ResourceRetention {
+  id              String   @id @default(uuid())
+  nukeAccountId   String
+  userId          String
+  
+  // Resource Details
+  resourceType    String   // "ec2", "s3", "rds", "lambda", etc.
+  resourceId      String   // Instance ID, bucket name, etc.
+  resourceName    String?
+  resourceArn     String?
+  resourceTags    Json?    @default("{}")
+  resourceRegion  String?
+  
+  // Retention Policy
+  retentionType   String   // "permanent", "until_date", "days"
+  retainUntil     DateTime?
+  retainDays      Int?
+  reason          String   @db.Text
+  
+  // Status
+  status          String   @default("active") // "active", "expired", "deleted"
+  isApproved      Boolean  @default(false)
+  approvedBy      String?
+  approvedAt      DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime?
+  
+  nukeAccount NukeAccount @relation(fields: [nukeAccountId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([nukeAccountId, resourceId])
+  @@index([nukeAccountId, status])
+  @@index([expiresAt])
+}
+
+model NukeNotification {
+  id            String   @id @default(uuid())
+  nukeRunId     String?
+  recipientEmail String
+  notificationType String // "upcoming_nuke", "retention_request", "nuke_completed"
+  sentAt        DateTime @default(now())
+  emailSubject  String
+  emailBody     String   @db.Text
+  
+  @@index([sentAt])
 }
