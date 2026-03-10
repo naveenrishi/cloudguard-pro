@@ -42,7 +42,7 @@ const CostAnalytics: React.FC = () => {
       setLoading(true);
       setError('');
       
-      const response = await fetch(`http://localhost:3000/api/cloud/accounts/${accountId}/costs`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/costs`);
       
       if (response.ok) {
         const data = await response.json();

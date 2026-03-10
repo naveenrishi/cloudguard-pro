@@ -97,7 +97,7 @@ const renderMarkdown = (text: string) => {
 // ─── API helpers ──────────────────────────────────────────────────────────────
 const callBackendAPI = async (endpoint: string, token: string) => {
   try {
-    const res = await fetch(`http://localhost:3000/${endpoint}`, {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/${endpoint}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) return await res.json();

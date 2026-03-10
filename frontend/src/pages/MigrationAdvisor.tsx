@@ -327,7 +327,7 @@ export default function MigrationAdvisor() {
   const fetchRecs = async () => {
     setLoading(true);
     try {
-      const r = await fetch('http://localhost:3000/api/migration/recommendations?scope=all-accounts', { headers: hdrs });
+      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations?scope=all-accounts', { headers: hdrs });
       if (r.ok) {
         const data = await r.json();
         if (data.recommendations?.length) setRecs(data.recommendations);
@@ -337,12 +337,12 @@ export default function MigrationAdvisor() {
   };
 
   const handleAccept = async (id: string) => {
-    try { await fetch(`http://localhost:3000/api/migration/recommendations/${id}/accept`, { method:'POST', headers:hdrs }); } catch {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations/${id}/accept`, { method:'POST', headers:hdrs }); } catch {}
     setRecs(prev => prev.map(r => r.id === id ? {...r, status:'accepted'} : r));
   };
 
   const handleDismiss = async (id: string) => {
-    try { await fetch(`http://localhost:3000/api/migration/recommendations/${id}/dismiss`, { method:'POST', headers:hdrs }); } catch {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations/${id}/dismiss`, { method:'POST', headers:hdrs }); } catch {}
     setRecs(prev => prev.map(r => r.id === id ? {...r, status:'dismissed'} : r));
   };
 

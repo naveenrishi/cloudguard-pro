@@ -106,7 +106,7 @@ const AccountNuke: React.FC = () => {
 
   const fetchAccountInfo = async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/cloud/accounts`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -126,7 +126,7 @@ const AccountNuke: React.FC = () => {
   const fetchNukeConfig = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3000/api/nuke/account/${accountId}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/account/${accountId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -322,7 +322,7 @@ settings:
 
   const fetchRetentions = async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/nuke/retentions/account/${accountId}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/retentions/account/${accountId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -910,7 +910,7 @@ const RetentionsTab: React.FC<{
   const approveRetention = async (id: string) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`http://localhost:3000/api/nuke/retention/${id}/approve`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/retention/${id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ userId: user.id }),
@@ -1299,7 +1299,7 @@ const RunNukeModal: React.FC<{
     }
 
     try {
-      const res = await fetch('http://localhost:3000/api/nuke/execute', {
+      const res = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -1605,7 +1605,7 @@ const AddRetentionModal: React.FC<{
     setSubmitting(true);
 
     try {
-      const res = await fetch('http://localhost:3000/api/nuke/retention', {
+      const res = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/retention', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ accountId, userId: user.id, resourceType, resourceId, resourceName, retentionType, expiresAt: retentionType === 'until_date' ? expiresAt : null, reason }),

@@ -91,7 +91,7 @@ const NotificationsPage: React.FC = () => {
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3000/api/notifications/${user.id}`, { headers: hdrs });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${user.id}`, { headers: hdrs });
       if (res.ok) {
         const json = await res.json();
         const list: any[] = json.notifications ?? json.data ?? (Array.isArray(json) ? json : []);
@@ -110,7 +110,7 @@ const NotificationsPage: React.FC = () => {
     setSelected(new Set());
     try {
       await Promise.all(ids.map(id =>
-        fetch(`http://localhost:3000/api/notifications/${id}/read`, { method:'POST', headers: hdrs })
+        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${id}/read`, { method:'POST', headers: hdrs })
       ));
     } catch (_) {}
   };
@@ -118,7 +118,7 @@ const NotificationsPage: React.FC = () => {
   const markAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     try {
-      await fetch(`http://localhost:3000/api/notifications/mark-all-read`, {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/mark-all-read`, {
         method:'POST', headers:{ ...hdrs, 'Content-Type':'application/json' },
         body: JSON.stringify({ userId: user.id }),
       });
@@ -130,7 +130,7 @@ const NotificationsPage: React.FC = () => {
     setSelected(new Set());
     try {
       await Promise.all(ids.map(id =>
-        fetch(`http://localhost:3000/api/notifications/${id}`, { method:'DELETE', headers: hdrs })
+        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${id}`, { method:'DELETE', headers: hdrs })
       ));
     } catch (_) {}
   };

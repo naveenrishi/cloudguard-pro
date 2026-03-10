@@ -107,7 +107,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     // ⚠️  Removed: document.documentElement.classList.remove('dark')
     // Dark class is now managed exclusively by ThemeContext
     const token = localStorage.getItem('accessToken');
-    fetch(`http://localhost:3000/api/notifications/${user.id}/unread-count`, {
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${user.id}/unread-count`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.ok ? r.json() : null)

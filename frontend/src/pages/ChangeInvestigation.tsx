@@ -96,7 +96,7 @@ export default function ChangeInvestigation() {
   const fetchChanges = async () => {
     setLoading(true);
     try {
-      const r = await fetch('http://localhost:3000/api/changes', { headers: hdrs });
+      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/changes', { headers: hdrs });
       if (r.ok) {
         const data = await r.json();
         setChanges(data.changes?.length ? data.changes : MOCK_CHANGES);

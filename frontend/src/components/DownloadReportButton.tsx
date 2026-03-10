@@ -49,7 +49,7 @@ export default function DownloadReportButton({
 
     try {
       const res = await fetch(
-        `http://localhost:3000/api/reports/generate?accountId=${encodeURIComponent(accountId)}&provider=${provider}&format=${format}`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports/generate?accountId=${encodeURIComponent(accountId)}&provider=${provider}&format=${format}`,
         { method: 'POST' }
       );
 

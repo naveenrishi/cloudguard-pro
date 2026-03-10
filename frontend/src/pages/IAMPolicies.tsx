@@ -157,7 +157,7 @@ export default function IAMPolicies() {
   const fetchPolicies = async () => {
     setLoading(true);
     try {
-      const r = await fetch('http://localhost:3000/api/iam/policies', { headers: hdrs });
+      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/iam/policies', { headers: hdrs });
       if (r.ok) {
         const data = await r.json();
         if (data.policies?.length) setPolicies(data.policies);

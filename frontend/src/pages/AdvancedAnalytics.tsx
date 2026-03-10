@@ -80,9 +80,9 @@ export default function AdvancedAnalytics() {
     setLoading(true);
     try {
       const [mcRes, fcRes, svcRes] = await Promise.allSettled([
-        fetch(`http://localhost:3000/api/analytics/multi-cloud?period=${activePeriod}`, { headers: hdrs }),
-        fetch(`http://localhost:3000/api/analytics/forecast`,                           { headers: hdrs }),
-        fetch(`http://localhost:3000/api/analytics/services?period=${activePeriod}`,    { headers: hdrs }),
+        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/analytics/multi-cloud?period=${activePeriod}`, { headers: hdrs }),
+        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/analytics/forecast`,                           { headers: hdrs }),
+        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/analytics/services?period=${activePeriod}`,    { headers: hdrs }),
       ]);
       if (mcRes.status  === 'fulfilled' && mcRes.value.ok)  setMultiCloud((await mcRes.value.json()).data  || MULTI_CLOUD);
       if (fcRes.status  === 'fulfilled' && fcRes.value.ok)  setForecast((await fcRes.value.json()).data    || FORECAST);

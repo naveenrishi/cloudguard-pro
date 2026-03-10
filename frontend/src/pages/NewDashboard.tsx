@@ -198,10 +198,10 @@ const DashboardOptimizationWidget: React.FC<{
     const fetchForAccount = async (acc: { id:string; accountName:string; provider:string }): Promise<OptRec[]> => {
       const p = (acc.provider || '').toLowerCase();
       const endpoints = p === 'azure'
-        ? [`http://localhost:3000/api/azure/advisor/${acc.id}`,
-           `http://localhost:3000/api/cloud/accounts/${acc.id}/optimizations`]
-        : [`http://localhost:3000/api/aws/optimizations/${acc.id}`,
-           `http://localhost:3000/api/cloud/accounts/${acc.id}/optimizations`];
+        ? [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/advisor/${acc.id}`,
+           `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${acc.id}/optimizations`]
+        : [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/aws/optimizations/${acc.id}`,
+           `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${acc.id}/optimizations`];
 
       for (const url of endpoints) {
         try {
@@ -453,14 +453,14 @@ const NewDashboard: React.FC = () => {
   const fetchAccountData = async () => {
     setLoading(true);
     try {
-      const accRes  = await fetch(`http://localhost:3000/api/cloud/accounts/`, { headers: hdrs });
+      const accRes  = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/`, { headers: hdrs });
       const accData = await accRes.json();
       const accs    = Array.isArray(accData) ? accData : (accData.accounts || []);
       setConnectedAccounts(accs);
       if (accs.length > 0) {
         const results = await Promise.allSettled(
           accs.map((a: any) =>
-            fetch(`http://localhost:3000/api/cloud/dashboard/${a.id}`, { headers: hdrs })
+            fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/dashboard/${a.id}`, { headers: hdrs })
               .then(r => r.json())
               .then(d => ({ ...d, id: a.id, accountName: a.accountName, provider: a.provider, region: a.region }))
           )
@@ -472,8 +472,8 @@ const NewDashboard: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  const fetchCloudStatus    = async () => { try { const r = await fetch('http://localhost:3000/api/health/status', { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
-  const fetchVersionUpdates = async () => { try { const r = await fetch('http://localhost:3000/api/health/version-updates', { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
+  const fetchCloudStatus    = async () => { try { const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/status', { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
+  const fetchVersionUpdates = async () => { try { const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/version-updates', { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
 
   useEffect(() => {
     fetchAccountData(); fetchCloudStatus(); fetchVersionUpdates();

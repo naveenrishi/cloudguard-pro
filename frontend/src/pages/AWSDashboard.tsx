@@ -127,7 +127,7 @@ const AWSDashboard: React.FC = () => {
       }
 
       // Real API call for connected accounts
-      const accountResponse = await fetch(`http://localhost:3000/api/cloud/accounts/${accountId}`, {
+      const accountResponse = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -136,7 +136,7 @@ const AWSDashboard: React.FC = () => {
       setAccount(accountData);
 
       // Fetch AWS regions and resources
-      const regionsResponse = await fetch(`http://localhost:3000/api/aws/regions/${accountId}`, {
+      const regionsResponse = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/aws/regions/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -168,7 +168,7 @@ const AWSDashboard: React.FC = () => {
 
     try {
       const resourcesResponse = await fetch(
-        `http://localhost:3000/api/aws/regions/${region.code}/resources`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/aws/regions/${region.code}/resources`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,

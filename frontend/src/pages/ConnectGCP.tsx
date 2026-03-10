@@ -130,7 +130,7 @@ export default function ConnectGCP() {
       setErrorMsg('');
     
       try {
-        const API = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+        const API = (import.meta.env.VITE_API_URL || '${import.meta.env.VITE_API_URL || "http://localhost:3000"}').replace(/\/$/, '');
         const token = localStorage.getItem('accessToken');   // ← send JWT
     
         const res = await fetch(`${API}/api/gcp/connect`, {  // ← correct path

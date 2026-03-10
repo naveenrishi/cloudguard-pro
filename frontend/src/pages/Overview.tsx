@@ -824,7 +824,7 @@ function AzureAdvisorWidget({ accountId, navigate }: { accountId:string; navigat
   const [recs, setRecs] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`http://localhost:3000/api/azure/advisor/${accountId}`)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/advisor/${accountId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.recommendations) setRecs(d.recommendations); })
       .catch(() => {});
@@ -902,7 +902,7 @@ function AzureResourceGroupsWidget({ accountId }: { accountId:string }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(`http://localhost:3000/api/azure/resource-groups/${accountId}`)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/resource-groups/${accountId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setGroups(d?.groups||[]); setLoaded(true); })
       .catch(() => { setLoaded(true); });
@@ -963,7 +963,7 @@ function AzureActivityWidget({ accountId }: { accountId:string }) {
   const [loaded,     setLoaded]     = useState(false);
 
   useEffect(() => {
-    fetch(`http://localhost:3000/api/azure/activity/${accountId}`)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/activity/${accountId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setActivities(d?.activities||[]); setLoaded(true); })
       .catch(() => { setLoaded(true); });
@@ -1042,7 +1042,7 @@ function SecurityFindingsWidget({ accountId, navigate, provider }: { accountId:s
   const [filter,   setFilter]   = useState<string>('ALL');
 
   useEffect(() => {
-    fetch(`http://localhost:3000/api/cloud/accounts/${accountId}/security`)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/security`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.findings) setFindings(d.findings); })
       .catch(() => {})
@@ -1138,7 +1138,7 @@ function IAMReportWidget({ accountId, navigate, provider }: { accountId:string; 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:3000/api/cloud/accounts/${accountId}/security`)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/security`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return;
@@ -1293,7 +1293,7 @@ function ChangeInvestigationWidget({ accountId, navigate, provider }: { accountI
 
   useEffect(() => {
     if (isAzureProvider) {
-      fetch(`http://localhost:3000/api/azure/activity/${accountId}`)
+      fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/activity/${accountId}`)
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           if (!d?.activities) return;
@@ -1312,7 +1312,7 @@ function ChangeInvestigationWidget({ accountId, navigate, provider }: { accountI
         .finally(() => setLoading(false));
     } else {
       // For AWS, build changes from security findings & derive change events
-      fetch(`http://localhost:3000/api/cloud/accounts/${accountId}/security`)
+      fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/security`)
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           const synthetic: any[] = [];
@@ -1506,8 +1506,8 @@ function OverviewOptimizationWidget({ accountId, provider, navigate }: {
     });
 
     const endpoints = provider === 'AZURE'
-      ? [`http://localhost:3000/api/azure/advisor/${accountId}`, `http://localhost:3000/api/cloud/accounts/${accountId}/optimizations`]
-      : [`http://localhost:3000/api/aws/optimizations/${accountId}`, `http://localhost:3000/api/cloud/accounts/${accountId}/optimizations`];
+      ? [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/advisor/${accountId}`, `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/optimizations`]
+      : [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/aws/optimizations/${accountId}`, `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/optimizations`];
 
     (async () => {
       for (const url of endpoints) {
@@ -1707,12 +1707,12 @@ export default function Overview() {
     if (!accountId) return;
     setLoading(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3000/api/cloud/dashboard/${accountId}`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/dashboard/${accountId}`);
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const json: DashboardData = await res.json();
       setData(json);
       try {
-        const secRes = await fetch(`http://localhost:3000/api/cloud/accounts/${accountId}/security`);
+        const secRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/security`);
         if (secRes.ok) { const secData = await secRes.json(); setSecurityFindings(secData.findings||[]); }
       } catch (_) {}
     } catch (e:any) {

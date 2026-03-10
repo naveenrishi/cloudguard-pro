@@ -140,7 +140,7 @@ const AzureDashboard: React.FC = () => {
       }
 
       // Real API call for connected accounts
-      const accountResponse = await fetch(`http://localhost:3000/api/cloud/accounts/${accountId}`, {
+      const accountResponse = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -149,7 +149,7 @@ const AzureDashboard: React.FC = () => {
       setAccount(accountData);
 
       // Fetch Azure subscriptions
-      const subsResponse = await fetch(`http://localhost:3000/api/azure/subscriptions/${accountId}`, {
+      const subsResponse = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/subscriptions/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
@@ -185,7 +185,7 @@ const AzureDashboard: React.FC = () => {
     try {
       // Fetch resource groups for this subscription
       const rgResponse = await fetch(
-        `http://localhost:3000/api/azure/subscriptions/${subscription.id}/resource-groups`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/subscriptions/${subscription.id}/resource-groups`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -197,7 +197,7 @@ const AzureDashboard: React.FC = () => {
 
       // Fetch all resources
       const resourcesResponse = await fetch(
-        `http://localhost:3000/api/azure/subscriptions/${subscription.id}/resources`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/subscriptions/${subscription.id}/resources`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,

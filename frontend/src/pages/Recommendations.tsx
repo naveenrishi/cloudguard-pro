@@ -47,7 +47,7 @@ const Recommendations: React.FC = () => {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const token = localStorage.getItem('accessToken');
 
-      const response = await fetch(`http://localhost:3000/api/cloud/recommendations/${user.id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/recommendations/${user.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

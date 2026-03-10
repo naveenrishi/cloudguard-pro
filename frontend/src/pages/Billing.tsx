@@ -123,8 +123,8 @@ const BillingPage: React.FC = () => {
     (async () => {
       try {
         const [invRes, schedRes] = await Promise.allSettled([
-          fetch(`http://localhost:3000/api/billing/invoices/${user.id}`, { headers: hdrs }),
-          fetch(`http://localhost:3000/api/billing/schedules/${user.id}`, { headers: hdrs }),
+          fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/invoices/${user.id}`, { headers: hdrs }),
+          fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules/${user.id}`, { headers: hdrs }),
         ]);
         if (invRes.status === 'fulfilled' && invRes.value.ok) {
           const d = await invRes.value.json();
@@ -147,7 +147,7 @@ const BillingPage: React.FC = () => {
     setExportingId(inv.id + fmt);
     setShowFormatMenu(null);
     try {
-      const res = await fetch(`http://localhost:3000/api/billing/invoices/${inv.id}/export?format=${fmt}`, { headers: hdrs });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/invoices/${inv.id}/export?format=${fmt}`, { headers: hdrs });
       if (res.ok) {
         const blob = await res.blob();
         const url  = URL.createObjectURL(blob);
@@ -188,7 +188,7 @@ const BillingPage: React.FC = () => {
   const handleCustomExport = async () => {
     setGenerating(true); setGenerated(false);
     try {
-      const res = await fetch('http://localhost:3000/api/billing/export', {
+      const res = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/export', {
         method:'POST', headers: hdrs,
         body: JSON.stringify({ userId:user.id, period:customPeriod, format:customFormat, accounts:customAccounts, sections:customSections }),
       });
@@ -217,7 +217,7 @@ const BillingPage: React.FC = () => {
     setShowScheduleModal(false);
     setSchedForm({ name:'', frequency:'monthly', format:'pdf', email:'' });
     try {
-      await fetch('http://localhost:3000/api/billing/schedules', {
+      await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules', {
         method:'POST', headers: hdrs,
         body: JSON.stringify({ userId:user.id, ...schedForm }),
       });
@@ -226,12 +226,12 @@ const BillingPage: React.FC = () => {
 
   const toggleSchedule = async (id: string) => {
     setSchedules(prev => prev.map(s => s.id===id ? {...s, active:!s.active} : s));
-    try { await fetch(`http://localhost:3000/api/billing/schedules/${id}/toggle`, { method:'POST', headers: hdrs }); } catch (_) {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules/${id}/toggle`, { method:'POST', headers: hdrs }); } catch (_) {}
   };
 
   const deleteSchedule = async (id: string) => {
     setSchedules(prev => prev.filter(s => s.id!==id));
-    try { await fetch(`http://localhost:3000/api/billing/schedules/${id}`, { method:'DELETE', headers: hdrs }); } catch (_) {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules/${id}`, { method:'DELETE', headers: hdrs }); } catch (_) {}
   };
 
   // ── summary stats ──

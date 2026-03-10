@@ -54,7 +54,7 @@ const Dashboard: React.FC = () => {
   const fetchAccounts = async (userId: string) => {
     try {
       const token = localStorage.getItem('accessToken');
-      const res  = await fetch(`http://localhost:3000/api/cloud/accounts/${userId}`, {
+      const res  = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -65,7 +65,7 @@ const Dashboard: React.FC = () => {
       // load per-account dashboards for the accounts table
       const results = await Promise.allSettled(
         list.map(a =>
-          fetch(`http://localhost:3000/api/cloud/dashboard/${a.id}`, {
+          fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/dashboard/${a.id}`, {
             headers: { Authorization: `Bearer ${token}` },
           }).then(r => r.json())
         )
@@ -82,7 +82,7 @@ const Dashboard: React.FC = () => {
   const fetchDashboardData = async (userId: string) => {
     try {
       const token = localStorage.getItem('accessToken');
-      const res   = await fetch(`http://localhost:3000/api/cloud/dashboard/${userId}`, {
+      const res   = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/dashboard/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDashboardData(await res.json());
@@ -96,7 +96,7 @@ const Dashboard: React.FC = () => {
   const handleLogout = async () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
-    try { await fetch('http://localhost:3000/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
+    try { await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
     navigate('/login');
   };
 
@@ -407,8 +407,8 @@ const MigrationAdvisorSection: React.FC<MigrationAdvisorSectionProps> = ({ accou
     try {
       const headers = { Authorization: `Bearer ${token}` };
       const [recRes, tcoRes] = await Promise.all([
-        axios.get(`http://localhost:3000/api/migration/recommendations/account/${accountId}`, { headers }),
-        axios.get(`http://localhost:3000/api/migration/tco/account/${accountId}`, { headers }),
+        axios.get(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations/account/${accountId}`, { headers }),
+        axios.get(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/tco/account/${accountId}`, { headers }),
       ]);
       setRecommendations(recRes.data || []);
       setTCOData(tcoRes.data || null);

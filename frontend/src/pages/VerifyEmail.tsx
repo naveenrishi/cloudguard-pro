@@ -23,7 +23,7 @@ const VerifyEmail: React.FC = () => {
 
   const verifyEmail = async (token: string) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/auth/verify-email?token=${token}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/verify-email?token=${token}`, {
         method: 'POST',
       });
 

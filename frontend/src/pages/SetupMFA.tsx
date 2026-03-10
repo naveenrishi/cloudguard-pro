@@ -24,7 +24,7 @@ const SetupMFA: React.FC = () => {
   const generateMFA = async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const response = await fetch(`http://localhost:3000/api/auth/setup-mfa/${user.id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/setup-mfa/${user.id}`, {
         method: 'POST',
       });
 
@@ -48,7 +48,7 @@ const SetupMFA: React.FC = () => {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const response = await fetch(`http://localhost:3000/api/auth/verify-mfa-setup/${user.id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/verify-mfa-setup/${user.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

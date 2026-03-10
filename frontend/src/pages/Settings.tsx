@@ -77,7 +77,7 @@ const Settings: React.FC = () => {
   const save = async (endpoint: string, body: object) => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3000/api/${endpoint}`, {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/${endpoint}`, {
         method: 'PUT', headers: hdrs, body: JSON.stringify(body),
       });
     } catch (_) {}
@@ -99,7 +99,7 @@ const Settings: React.FC = () => {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3000/api/users/${storedUser.id}`, {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/users/${storedUser.id}`, {
         method:'PUT', headers: hdrs, body: JSON.stringify(profile),
       });
       localStorage.setItem('user', JSON.stringify({ ...storedUser, ...profile }));
@@ -138,7 +138,7 @@ const Settings: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch('http://localhost:3000/api/cloud/accounts/', { headers: hdrs });
+        const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/', { headers: hdrs });
         if (r.ok) {
           const d = await r.json();
           const list = Array.isArray(d) ? d : (d.accounts || []);
@@ -163,14 +163,14 @@ const Settings: React.FC = () => {
   const handleDisconnect = async (id: string) => {
     setAccounts(prev => prev.filter(a => a.id !== id));
     setDeleteConfirmId(null);
-    try { await fetch(`http://localhost:3000/api/cloud/accounts/${id}`, { method:'DELETE', headers: hdrs }); } catch (_) {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${id}`, { method:'DELETE', headers: hdrs }); } catch (_) {}
     showToast('Account disconnected');
   };
 
   const handleSyncAccount = async (id: string) => {
     setAccounts(prev => prev.map(a => a.id === id ? { ...a, status:'syncing' } : a));
     try {
-      await fetch(`http://localhost:3000/api/cloud/accounts/${id}/sync`, { method:'POST', headers: hdrs });
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${id}/sync`, { method:'POST', headers: hdrs });
       setTimeout(() => setAccounts(prev => prev.map(a => a.id === id ? { ...a, status:'connected', lastSync:'Just now' } : a)), 3000);
     } catch (_) {
       setAccounts(prev => prev.map(a => a.id === id ? { ...a, status:'connected' } : a));

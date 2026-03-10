@@ -104,7 +104,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ open, on
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3000/api/notifications/${user.id}`, { headers: hdrs });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${user.id}`, { headers: hdrs });
       if (res.ok) {
         const json = await res.json();
         const list: any[] = json.notifications ?? json.data ?? (Array.isArray(json) ? json : []);
@@ -126,7 +126,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ open, on
   const markRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     try {
-      await fetch(`http://localhost:3000/api/notifications/${id}/read`, { method: 'POST', headers: hdrs });
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${id}/read`, { method: 'POST', headers: hdrs });
     } catch (_) {}
   };
 
@@ -134,7 +134,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ open, on
   const markAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     try {
-      await fetch(`http://localhost:3000/api/notifications/mark-all-read`, {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/mark-all-read`, {
         method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id }),
       });
@@ -145,7 +145,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ open, on
   const dismiss = async (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
     try {
-      await fetch(`http://localhost:3000/api/notifications/${id}`, { method: 'DELETE', headers: hdrs });
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/notifications/${id}`, { method: 'DELETE', headers: hdrs });
     } catch (_) {}
   };
 

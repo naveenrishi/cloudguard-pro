@@ -15,7 +15,7 @@ import axios from 'axios';
 
 const AccountMigrationAdvisor: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
-  const API_URL = 'http://localhost:3000';
+  const API_URL = '${import.meta.env.VITE_API_URL || "http://localhost:3000"}';
   const token = localStorage.getItem('accessToken') || '';
 
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -38,7 +38,7 @@ const AccountMigrationAdvisor: React.FC = () => {
 
   const fetchAccountInfo = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/api/cloud/accounts`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       
