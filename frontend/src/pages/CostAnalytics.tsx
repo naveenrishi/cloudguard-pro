@@ -255,7 +255,7 @@ const CostAnalytics: React.FC = () => {
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
-                  label={(entry) => `${entry.name}: $${entry.cost.toFixed(0)}`}
+                  label={(entry) => `${entry.name}: $${entry.value.toFixed(0)}`}
                 >
                   {services.slice(0, 6).map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

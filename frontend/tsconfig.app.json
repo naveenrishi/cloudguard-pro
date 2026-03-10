@@ -12,7 +12,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": false,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "types": ["vite/client"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "../backend"]
