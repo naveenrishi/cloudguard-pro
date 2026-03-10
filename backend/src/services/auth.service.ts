@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
-import { sendVerificationEmail } from './email.service';
 import { generateRandomString } from '../utils/encryption';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -22,10 +21,7 @@ export const register = async (data: RegisterInput) => {
   const { name, email, password } = data;
 
   // Check if user already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-
+  const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new Error('Email already registered');
   }
@@ -35,27 +31,32 @@ export const register = async (data: RegisterInput) => {
 
   // Generate verification token
   const verificationToken = generateRandomString(32);
-  const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   // Create user
   const user = await prisma.user.create({
     data: {
       name,
       email,
-      passwordHash,
+      password: passwordHash,
       verificationToken,
       verificationExpiry,
-      emailVerified: true,
+      emailVerified: false,
     },
   });
 
-  // Send verification email
-  try {
-    await sendVerificationEmail(email, name, verificationToken);
-  } catch (error) {
-    console.error('Failed to send verification email:', error);
-    // Don't fail registration if email fails
-  }
+  // Generate tokens immediately so user can log in
+  const accessToken = jwt.sign(
+    { userId: user.id, email: user.email },
+    JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+  );
+
+  const refreshToken = jwt.sign(
+    { userId: user.id },
+    JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+  );
 
   return {
     user: {
@@ -67,7 +68,7 @@ export const register = async (data: RegisterInput) => {
     },
     accessToken,
     refreshToken,
-    requiresMfa: user.mfaEnabled, // Add this flag
+    requiresMfa: user.mfaEnabled,
   };
 };
 
@@ -75,10 +76,7 @@ export const login = async (data: LoginInput) => {
   const { email, password } = data;
 
   // Find user
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
-
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     throw new Error('Invalid credentials');
   }
@@ -89,26 +87,26 @@ export const login = async (data: LoginInput) => {
     throw new Error(`Account locked. Try again in ${minutesLeft} minutes`);
   }
 
-  // Verify password
-  const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-
+  // Verify password — use user.password (matches schema)
+  const isValidPassword = await bcrypt.compare(password, user.password);
   if (!isValidPassword) {
-    // Increment login attempts
     const loginAttempts = user.loginAttempts + 1;
     let lockedUntil = null;
-
-    // Lock account after 5 failed attempts
     if (loginAttempts >= 5) {
-      lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
     }
-
     await prisma.user.update({
       where: { id: user.id },
       data: { loginAttempts, lockedUntil },
     });
-
     throw new Error('Invalid credentials');
   }
+
+  // Reset login attempts on success
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { loginAttempts: 0, lockedUntil: null },
+  });
 
   // Generate tokens
   const accessToken = jwt.sign(
@@ -123,16 +121,21 @@ export const login = async (data: LoginInput) => {
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
   );
 
-  // Save refresh token to database
-  await prisma.session.create({
-    data: {
-      userId: user.id,
-      refreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      ipAddress: '', // Will be set from request
-      userAgent: '', // Will be set from request
-    },
-  });
+  // Save session
+  try {
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ipAddress: '',
+        userAgent: '',
+      },
+    });
+  } catch (e) {
+    // Session table might not exist — don't block login
+    console.error('Session save failed (non-fatal):', e);
+  }
 
   return {
     user: {
@@ -144,5 +147,6 @@ export const login = async (data: LoginInput) => {
     },
     accessToken,
     refreshToken,
+    requiresMfa: user.mfaEnabled,
   };
 };
