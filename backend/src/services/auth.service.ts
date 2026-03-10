@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
-import { generateRandomString } from '../utils/encryption';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret';
@@ -20,32 +19,22 @@ interface LoginInput {
 export const register = async (data: RegisterInput) => {
   const { name, email, password } = data;
 
-  // Check if user already exists
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new Error('Email already registered');
   }
 
-  // Hash password
   const passwordHash = await bcrypt.hash(password, 12);
 
-  // Generate verification token
-  const verificationToken = generateRandomString(32);
-  const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-  // Create user
   const user = await prisma.user.create({
     data: {
       name,
       email,
       password: passwordHash,
-      verificationToken,
-      verificationExpiry,
-      emailVerified: false,
+      emailVerified: true,
     },
   });
 
-  // Generate tokens immediately so user can log in
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email },
     JWT_SECRET,
@@ -75,19 +64,16 @@ export const register = async (data: RegisterInput) => {
 export const login = async (data: LoginInput) => {
   const { email, password } = data;
 
-  // Find user
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     throw new Error('Invalid credentials');
   }
 
-  // Check if account is locked
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
     throw new Error(`Account locked. Try again in ${minutesLeft} minutes`);
   }
 
-  // Verify password — use user.password (matches schema)
   const isValidPassword = await bcrypt.compare(password, user.password);
   if (!isValidPassword) {
     const loginAttempts = user.loginAttempts + 1;
@@ -102,13 +88,11 @@ export const login = async (data: LoginInput) => {
     throw new Error('Invalid credentials');
   }
 
-  // Reset login attempts on success
   await prisma.user.update({
     where: { id: user.id },
     data: { loginAttempts: 0, lockedUntil: null },
   });
 
-  // Generate tokens
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email },
     JWT_SECRET,
@@ -121,7 +105,6 @@ export const login = async (data: LoginInput) => {
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
   );
 
-  // Save session
   try {
     await prisma.session.create({
       data: {
@@ -133,7 +116,6 @@ export const login = async (data: LoginInput) => {
       },
     });
   } catch (e) {
-    // Session table might not exist — don't block login
     console.error('Session save failed (non-fatal):', e);
   }
 
