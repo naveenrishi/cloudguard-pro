@@ -1299,7 +1299,7 @@ const RunNukeModal: React.FC<{
     }
 
     try {
-      const res = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/execute', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -1605,7 +1605,7 @@ const AddRetentionModal: React.FC<{
     setSubmitting(true);
 
     try {
-      const res = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/retention', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/nuke/retention', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ accountId, userId: user.id, resourceType, resourceId, resourceName, retentionType, expiresAt: retentionType === 'until_date' ? expiresAt : null, reason }),

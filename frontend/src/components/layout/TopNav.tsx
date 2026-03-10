@@ -13,7 +13,7 @@ const TopNav: React.FC<TopNavProps> = ({ darkMode, setDarkMode }) => {
   const handleLogout = async () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
-    await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/logout', {
+    await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/logout', {
       method: 'POST',
       credentials: 'include',
     });

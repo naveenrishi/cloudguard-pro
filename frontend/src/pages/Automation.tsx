@@ -432,7 +432,7 @@ const Automation: React.FC = () => {
     let finalResult: 'success'|'error' = 'success';
     if (!isDryRun) {
       try {
-        const resp = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/automation/execute',{
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/automation/execute',{
           method:'POST', headers:hdrs,
           body:JSON.stringify({cloud, accountId:selAccount, serviceId:selService!.id, actionId:selAction!.id, resourceId:selResource, code, taskName, reason:taskReason}),
         });

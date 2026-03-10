@@ -472,8 +472,8 @@ const NewDashboard: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  const fetchCloudStatus    = async () => { try { const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/status', { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
-  const fetchVersionUpdates = async () => { try { const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/version-updates', { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
+  const fetchCloudStatus    = async () => { try { const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/status', { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
+  const fetchVersionUpdates = async () => { try { const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/version-updates', { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
 
   useEffect(() => {
     fetchAccountData(); fetchCloudStatus(); fetchVersionUpdates();

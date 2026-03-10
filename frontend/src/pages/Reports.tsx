@@ -85,7 +85,7 @@ export default function Reports() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports', { headers: hdrs });
+      const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports', { headers: hdrs });
       if (r.ok) {
         const data = await r.json();
         setReports(data.reports?.length ? data.reports : MOCK_REPORTS);
@@ -99,7 +99,7 @@ export default function Reports() {
     const id = `gen-${Date.now()}`;
     setGenerating(id);
     try {
-      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports/generate', {
+      const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports/generate', {
         method: 'POST',
         headers: { ...hdrs, 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, period }),
@@ -129,7 +129,7 @@ export default function Reports() {
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports/schedule', {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/reports/schedule', {
         method: 'POST',
         headers: { ...hdrs, 'Content-Type': 'application/json' },
         body: JSON.stringify(scheduleForm),

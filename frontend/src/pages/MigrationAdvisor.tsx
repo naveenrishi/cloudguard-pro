@@ -327,7 +327,7 @@ export default function MigrationAdvisor() {
   const fetchRecs = async () => {
     setLoading(true);
     try {
-      const r = await fetch('${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations?scope=all-accounts', { headers: hdrs });
+      const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/migration/recommendations?scope=all-accounts', { headers: hdrs });
       if (r.ok) {
         const data = await r.json();
         if (data.recommendations?.length) setRecs(data.recommendations);
