@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import OpenAI from 'openai';
 import reportsRouter from './routes/reports.routes';
 import gcpRouter from './routes/gcp.routes';
+import apiRouter from './routes/index';
 
 dotenv.config();
 
@@ -1028,6 +1029,7 @@ app.get('/api/budgets/anomalies/:accountId',        (_req, res) => res.json([]))
 // ============================================
 app.use('/api/reports', reportsRouter);
 app.use('/api/gcp',     gcpRouter);
+app.use('/api', apiRouter);
 
 // ============================================
 // FALLBACK — must be last
