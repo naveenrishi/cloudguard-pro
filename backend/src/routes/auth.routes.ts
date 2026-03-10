@@ -210,7 +210,6 @@ router.post('/verify-mfa-setup/:userId', async (req, res) => {
       where: { id: userId },
       data: {
         mfaEnabled: true,
-        mfaBackupCodes: hashedBackupCodes,  // ← Changed from backupCodes
       },
     });
 
