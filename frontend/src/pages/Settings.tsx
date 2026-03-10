@@ -138,7 +138,7 @@ const Settings: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/', { headers: hdrs });
+        const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/`, { headers: hdrs });
         if (r.ok) {
           const d = await r.json();
           const list = Array.isArray(d) ? d : (d.accounts || []);

@@ -96,7 +96,7 @@ const Dashboard: React.FC = () => {
   const handleLogout = async () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
-    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
+    try { await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/logout`, { method: 'POST', credentials: 'include' }); } catch (_) {}
     navigate('/login');
   };
 

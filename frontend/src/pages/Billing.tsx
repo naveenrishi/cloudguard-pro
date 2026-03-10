@@ -188,7 +188,7 @@ const BillingPage: React.FC = () => {
   const handleCustomExport = async () => {
     setGenerating(true); setGenerated(false);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/export', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/export`, {
         method:'POST', headers: hdrs,
         body: JSON.stringify({ userId:user.id, period:customPeriod, format:customFormat, accounts:customAccounts, sections:customSections }),
       });
@@ -217,7 +217,7 @@ const BillingPage: React.FC = () => {
     setShowScheduleModal(false);
     setSchedForm({ name:'', frequency:'monthly', format:'pdf', email:'' });
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules', {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/billing/schedules`, {
         method:'POST', headers: hdrs,
         body: JSON.stringify({ userId:user.id, ...schedForm }),
       });
