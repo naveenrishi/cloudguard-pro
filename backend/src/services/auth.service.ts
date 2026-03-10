@@ -110,16 +110,6 @@ export const login = async (data: LoginInput) => {
     throw new Error('Invalid credentials');
   }
 
-  // Reset login attempts on successful login
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { 
-      loginAttempts: 0,
-      lockedUntil: null,
-      lastLoginAt: new Date(),
-    },
-  });
-
   // Generate tokens
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email },

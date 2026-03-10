@@ -1,0 +1,32 @@
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const existing = await prisma.user.findUnique({ where: { id: 'default-user' } });
+
+  if (existing) {
+    console.log('✅ default-user already exists:', existing.email);
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash('changeme123', 10);
+
+  const user = await prisma.user.create({
+    data: {
+      id: 'default-user',
+      email: 'admin@cloudguard.local',
+      password: hashedPassword,
+      name: 'Admin',
+      role: 'ADMIN',
+      emailVerified: true,
+    },
+  });
+
+  console.log('✅ Created default-user:', user.id, user.email);
+}
+
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());

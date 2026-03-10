@@ -93,7 +93,6 @@ router.post('/logout', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // Email verification endpoint
 router.post('/verify-email', async (req, res) => {
   try {
@@ -198,7 +197,6 @@ router.post('/verify-mfa-setup/:userId', async (req, res) => {
     if (!verified) {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
-
     // Generate backup codes
     const backupCodes = Array.from({ length: 10 }, () =>
       Math.random().toString(36).substring(2, 10).toUpperCase()

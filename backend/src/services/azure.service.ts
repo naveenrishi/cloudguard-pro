@@ -1,215 +1,351 @@
 import { ClientSecretCredential } from '@azure/identity';
+import { ComputeManagementClient } from '@azure/arm-compute';
+import { StorageManagementClient } from '@azure/arm-storage';
+import { SqlManagementClient } from '@azure/arm-sql';
+import { MonitorClient } from '@azure/arm-monitor';
 import { CostManagementClient } from '@azure/arm-costmanagement';
-import { SubscriptionClient } from '@azure/arm-subscriptions';
-import prisma from '../config/database';
-import { decrypt } from '../utils/encryption';
+import { SecurityCenter } from '@azure/arm-security';
+import { ResourceManagementClient } from '@azure/arm-resources';
 
-export const connectAzure = async (userId: string, data: {
-  subscriptionId: string;
-  tenantId: string;
-  clientId: string;
-  clientSecret: string;
-  accountName: string;
-}) => {
-  try {
-    const { subscriptionId, tenantId, clientId, clientSecret, accountName } = data;
+export class AzureService {
+  private credentials: ClientSecretCredential;
+  private subscriptionId: string;
+  private computeClient: ComputeManagementClient;
+  private storageClient: StorageManagementClient;
+  private sqlClient: SqlManagementClient;
+  private monitorClient: MonitorClient;
+  private costManagementClient: CostManagementClient;
+  private securityClient: SecurityCenter;
+  private resourceClient: ResourceManagementClient;
 
-    // Test credentials
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const subscriptionClient = new SubscriptionClient(credential);
-    
-    // Verify subscription access
-    const subscription = await subscriptionClient.subscriptions.get(subscriptionId);
-    
-    if (!subscription) {
-      throw new Error('Invalid subscription or insufficient permissions');
-    }
+  constructor(tenantId: string, clientId: string, clientSecret: string, subscriptionId: string) {
+    this.credentials = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    this.subscriptionId = subscriptionId;
 
-    // Save to database
-    const account = await prisma.cloudAccount.create({
-      data: {
-        userId,
-        provider: 'azure',
-        accountName: accountName || subscription.displayName || 'Azure Account',
-        accountId: subscriptionId,
-        azureTenantId: tenantId,
-        azureClientId: clientId,
-        azureClientSecret: clientSecret, // Should encrypt this
-        isConnected: true,
-        region: 'global',
-      },
-    });
-
-    return {
-      id: account.id,
-      accountName: account.accountName,
-      accountId: account.accountId,
-      provider: 'azure',
-    };
-  } catch (error: any) {
-    console.error('Azure connection error:', error);
-    throw new Error(`Failed to connect Azure: ${error.message}`);
+    this.computeClient = new ComputeManagementClient(this.credentials, this.subscriptionId);
+    this.storageClient = new StorageManagementClient(this.credentials, this.subscriptionId);
+    this.sqlClient = new SqlManagementClient(this.credentials, this.subscriptionId);
+    this.monitorClient = new MonitorClient(this.credentials, this.subscriptionId);
+    this.costManagementClient = new CostManagementClient(this.credentials);
+    this.securityClient = new SecurityCenter(this.credentials, this.subscriptionId);
+    this.resourceClient = new ResourceManagementClient(this.credentials, this.subscriptionId);
   }
-};
 
-export const getAzureCosts = async (cloudAccountId: string) => {
-  try {
-    const account = await prisma.cloudAccount.findUnique({
-      where: { id: cloudAccountId },
-    });
+  // ============================================
+  // VIRTUAL MACHINES
+  // ============================================
 
-    if (!account || !account.azureTenantId || !account.azureClientId || !account.azureClientSecret) {
-      throw new Error('Azure account not found or not properly configured');
+  async getVirtualMachines() {
+    try {
+      const vms = [];
+      
+      for await (const vm of this.computeClient.virtualMachines.listAll()) {
+        const instanceView = await this.computeClient.virtualMachines.instanceView(
+          this.getResourceGroupFromId(vm.id!),
+          vm.name!
+        );
+
+        vms.push({
+          id: vm.id,
+          name: vm.name,
+          location: vm.location,
+          vmSize: vm.hardwareProfile?.vmSize,
+          osType: vm.storageProfile?.osDisk?.osType,
+          provisioningState: vm.provisioningState,
+          powerState: instanceView.statuses?.find(s => s.code?.startsWith('PowerState/'))?.displayStatus,
+          privateIp: vm.networkProfile?.networkInterfaces?.[0]?.id,
+          tags: vm.tags,
+          resourceGroup: this.getResourceGroupFromId(vm.id!),
+        });
+      }
+
+      return vms;
+    } catch (error) {
+      console.error('Error fetching Azure VMs:', error);
+      throw error;
     }
+  }
 
-    const credential = new ClientSecretCredential(
-      account.azureTenantId,
-      account.azureClientId,
-      account.azureClientSecret
-    );
+  // ============================================
+  // STORAGE ACCOUNTS
+  // ============================================
 
-    const costClient = new CostManagementClient(credential);
+  async getStorageAccounts() {
+    try {
+      const accounts = [];
 
-    // Get current month dates
-    const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      for await (const account of this.storageClient.storageAccounts.list()) {
+        accounts.push({
+          id: account.id,
+          name: account.name,
+          location: account.location,
+          kind: account.kind,
+          sku: account.sku?.name,
+          provisioningState: account.provisioningState,
+          primaryEndpoints: account.primaryEndpoints,
+          encryption: account.encryption?.services,
+          networkRuleSet: account.networkRuleSet,
+          tags: account.tags,
+          resourceGroup: this.getResourceGroupFromId(account.id!),
+        });
+      }
 
-    // Get last complete month
-    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      return accounts;
+    } catch (error) {
+      console.error('Error fetching storage accounts:', error);
+      throw error;
+    }
+  }
 
-    const scope = `/subscriptions/${account.accountId}`;
+  // ============================================
+  // SQL DATABASES
+  // ============================================
 
-    // Query for last month actual costs
-    const lastMonthQuery: any = {
-      type: 'ActualCost',
-      timeframe: 'Custom',
-      timePeriod: {
-        from: lastMonthStart.toISOString().split('T')[0],
-        to: lastMonthEnd.toISOString().split('T')[0],
-      },
-      dataset: {
-        granularity: 'Monthly',
-        aggregation: {
-          totalCost: {
-            name: 'Cost',
-            function: 'Sum',
-          },
+  async getSqlDatabases() {
+    try {
+      const databases = [];
+      
+      // First, get all SQL servers
+      for await (const server of this.sqlClient.servers.list()) {
+        const resourceGroup = this.getResourceGroupFromId(server.id!);
+        
+        // Then get databases for each server
+        for await (const db of this.sqlClient.databases.listByServer(resourceGroup, server.name!)) {
+          if (db.name !== 'master') { // Skip master database
+            databases.push({
+              id: db.id,
+              name: db.name,
+              serverName: server.name,
+              location: db.location,
+              edition: db.sku?.tier,
+              capacity: db.sku?.capacity,
+              maxSizeBytes: db.maxSizeBytes,
+              status: db.status,
+              creationDate: db.creationDate,
+              collation: db.collation,
+              tags: db.tags,
+              resourceGroup,
+            });
+          }
+        }
+      }
+
+      return databases;
+    } catch (error) {
+      console.error('Error fetching SQL databases:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // COST MANAGEMENT
+  // ============================================
+
+  async getCostAndUsage(startDate: string, endDate: string) {
+    try {
+      const scope = `/subscriptions/${this.subscriptionId}`;
+      
+      const queryResult = await this.costManagementClient.query.usage(scope, {
+        type: 'ActualCost',
+        timeframe: 'Custom',
+        timePeriod: {
+          from: new Date(startDate),
+          to: new Date(endDate),
         },
-      },
-    };
-
-    const lastMonthResult = await costClient.query.usage(scope, lastMonthQuery);
-    const lastMonthCost = lastMonthResult.rows?.[0]?.[0] || 0;
-
-    // Query for current month costs
-    const currentMonthQuery: any = {
-      type: 'ActualCost',
-      timeframe: 'Custom',
-      timePeriod: {
-        from: firstDayOfMonth.toISOString().split('T')[0],
-        to: today.toISOString().split('T')[0],
-      },
-      dataset: {
-        granularity: 'Monthly',
-        aggregation: {
-          totalCost: {
-            name: 'Cost',
-            function: 'Sum',
+        dataset: {
+          granularity: 'Monthly',
+          aggregation: {
+            totalCost: {
+              name: 'Cost',
+              function: 'Sum',
+            },
           },
+          grouping: [
+            {
+              type: 'Dimension',
+              name: 'ServiceName',
+            },
+          ],
         },
-      },
-    };
+      });
 
-    const currentMonthResult = await costClient.query.usage(scope, currentMonthQuery);
-    const currentMonthCost = currentMonthResult.rows?.[0]?.[0] || 0;
+      const costData = queryResult.rows?.map(row => ({
+        service: row[2], // ServiceName
+        cost: parseFloat(row[0] as string), // Cost
+        currency: row[1], // Currency
+      })) || [];
 
-    // Get 6-month trend
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const totalCost = costData.reduce((sum, item) => sum + item.cost, 0);
 
-    const trendQuery: any = {
-      type: 'ActualCost',
-      timeframe: 'Custom',
-      timePeriod: {
-        from: sixMonthsAgo.toISOString().split('T')[0],
-        to: today.toISOString().split('T')[0],
-      },
-      dataset: {
-        granularity: 'Monthly',
-        aggregation: {
-          totalCost: {
-            name: 'Cost',
-            function: 'Sum',
-          },
-        },
-      },
-    };
-
-    const trendResult = await costClient.query.usage(scope, trendQuery);
-    const costTrend = trendResult.rows?.map((row: any, index: number) => {
-      const date = new Date(sixMonthsAgo);
-      date.setMonth(date.getMonth() + index);
       return {
-        month: date.toLocaleDateString('en-US', { month: 'short' }),
-        cost: parseFloat(row[0]) || 0,
+        totalCost,
+        services: costData,
+        period: { start: startDate, end: endDate },
       };
-    }) || [];
-
-    // Get service breakdown
-    const serviceQuery: any = {
-      type: 'ActualCost',
-      timeframe: 'Custom',
-      timePeriod: {
-        from: lastMonthStart.toISOString().split('T')[0],
-        to: lastMonthEnd.toISOString().split('T')[0],
-      },
-      dataset: {
-        granularity: 'Monthly',
-        aggregation: {
-          totalCost: {
-            name: 'Cost',
-            function: 'Sum',
-          },
-        },
-        grouping: [
-          {
-            type: 'Dimension',
-            name: 'ServiceName',
-          },
-        ],
-      },
-    };
-
-    const serviceResult = await costClient.query.usage(scope, serviceQuery);
-    const serviceBreakdown = serviceResult.rows?.map((row: any) => ({
-      name: row[1] || 'Other',
-      value: parseFloat(row[0]) || 0,
-    }))
-    .filter((item: any) => item.value > 0)
-    .sort((a: any, b: any) => b.value - a.value)
-    .slice(0, 10) || [];
-
-    // Simple forecast (current month MTD * days ratio)
-    const daysInMonth = lastDayOfMonth.getDate();
-    const daysElapsed = today.getDate();
-    const forecastCost = (currentMonthCost / daysElapsed) * daysInMonth - currentMonthCost;
-
-    console.log('💰 Azure Last Month:', lastMonthCost);
-    console.log('📊 Azure Current Month MTD:', currentMonthCost);
-    console.log('🔮 Azure Forecast:', forecastCost);
-
-    return {
-      lastMonthCost: Math.round(lastMonthCost * 100) / 100,
-      currentMonthCost: Math.round(currentMonthCost * 100) / 100,
-      currentMonthEstimate: Math.round((currentMonthCost + forecastCost) * 100) / 100,
-      forecastCost: Math.round(forecastCost * 100) / 100,
-      costTrend,
-      serviceBreakdown,
-    };
-  } catch (error: any) {
-    console.error('Azure cost fetch error:', error);
-    throw new Error(`Failed to fetch Azure costs: ${error.message}`);
+    } catch (error) {
+      console.error('Error fetching Azure cost data:', error);
+      throw error;
+    }
   }
-};
+
+  // ============================================
+  // SECURITY - RECOMMENDATIONS
+  // ============================================
+
+  async getSecurityRecommendations() {
+    try {
+      const recommendations = [];
+
+      for await (const task of this.securityClient.tasks.list()) {
+        recommendations.push({
+          id: task.id,
+          name: task.name,
+          severity: this.mapSeverity(task.securityTaskParameters?.severity),
+          title: task.securityTaskParameters?.name,
+          description: task.securityTaskParameters?.description,
+          resourceType: task.securityTaskParameters?.resourceType,
+          resourceId: task.securityTaskParameters?.resourceId,
+          state: task.state,
+          creationTimeUtc: task.creationTimeUtc,
+        });
+      }
+
+      return recommendations;
+    } catch (error) {
+      console.error('Error fetching security recommendations:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // SECURITY - ALERTS
+  // ============================================
+
+  async getSecurityAlerts() {
+    try {
+      const alerts = [];
+
+      for await (const alert of this.securityClient.alerts.list()) {
+        alerts.push({
+          id: alert.id,
+          name: alert.name,
+          severity: alert.severity,
+          title: alert.alertDisplayName,
+          description: alert.description,
+          compromisedEntity: alert.compromisedEntity,
+          detectedTimeUtc: alert.detectedTimeUtc,
+          status: alert.status,
+          intent: alert.intent,
+          entities: alert.entities,
+        });
+      }
+
+      return alerts;
+    } catch (error) {
+      console.error('Error fetching security alerts:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // METRICS
+  // ============================================
+
+  async getVMMetrics(resourceId: string, metricName: string, startTime: Date, endTime: Date) {
+    try {
+      const timespan = `${startTime.toISOString()}/${endTime.toISOString()}`;
+      
+      const metrics = await this.monitorClient.metrics.list(resourceId, {
+        timespan,
+        interval: 'PT1H',
+        metricnames: metricName,
+        aggregation: 'Average,Maximum',
+      });
+
+      const metricData = metrics.value?.[0]?.timeseries?.[0]?.data?.map(point => ({
+        timestamp: point.timeStamp,
+        average: point.average,
+        maximum: point.maximum,
+      })) || [];
+
+      return metricData;
+    } catch (error) {
+      console.error('Error fetching VM metrics:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // RESOURCE GROUPS
+  // ============================================
+
+  async getResourceGroups() {
+    try {
+      const resourceGroups = [];
+
+      for await (const rg of this.resourceClient.resourceGroups.list()) {
+        resourceGroups.push({
+          id: rg.id,
+          name: rg.name,
+          location: rg.location,
+          provisioningState: rg.properties?.provisioningState,
+          tags: rg.tags,
+        });
+      }
+
+      return resourceGroups;
+    } catch (error) {
+      console.error('Error fetching resource groups:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // ALL RESOURCES
+  // ============================================
+
+  async getAllResources() {
+    try {
+      const resources = [];
+
+      for await (const resource of this.resourceClient.resources.list()) {
+        resources.push({
+          id: resource.id,
+          name: resource.name,
+          type: resource.type,
+          location: resource.location,
+          kind: resource.kind,
+          tags: resource.tags,
+          resourceGroup: this.getResourceGroupFromId(resource.id!),
+        });
+      }
+
+      return resources;
+    } catch (error) {
+      console.error('Error fetching all resources:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+
+  private getResourceGroupFromId(resourceId: string): string {
+    const match = resourceId.match(/resourceGroups\/([^\/]+)/i);
+    return match ? match[1] : '';
+  }
+
+  private mapSeverity(severity?: string): string {
+    switch (severity?.toLowerCase()) {
+      case 'high':
+        return 'critical';
+      case 'medium':
+        return 'high';
+      case 'low':
+        return 'medium';
+      default:
+        return 'low';
+    }
+  }
+}

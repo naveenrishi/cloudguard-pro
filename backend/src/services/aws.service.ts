@@ -1,252 +1,339 @@
-import AWS from 'aws-sdk';
-import prisma from '../config/database';
-import { encrypt, decrypt } from '../utils/encryption';
-import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
-import { CostExplorerClient, GetCostAndUsageCommand } from '@aws-sdk/client-cost-explorer';
-import prisma from '../config/database';
-import { encrypt, decrypt } from '../utils/encryption';
+import { 
+  EC2Client, 
+  DescribeInstancesCommand,
+  DescribeVolumesCommand,
+  DescribeSnapshotsCommand 
+} from '@aws-sdk/client-ec2';
+import { 
+  RDSClient, 
+  DescribeDBInstancesCommand,
+  DescribeDBClustersCommand 
+} from '@aws-sdk/client-rds';
+import { 
+  S3Client, 
+  ListBucketsCommand,
+  GetBucketLocationCommand 
+} from '@aws-sdk/client-s3';
+import { 
+  CostExplorerClient, 
+  GetCostAndUsageCommand 
+} from '@aws-sdk/client-cost-explorer';
+import { 
+  CloudWatchClient,
+  GetMetricStatisticsCommand 
+} from '@aws-sdk/client-cloudwatch';
+import { 
+  IAMClient,
+  ListUsersCommand,
+  GetCredentialReportCommand,
+  GenerateCredentialReportCommand 
+} from '@aws-sdk/client-iam';
 
-interface ConnectAWSInput {
-  userId: string;
-  accountName: string;
-  accountId: string;
-  roleArn: string;
-  externalId: string;
-}
+export class AWSService {
+  private ec2Client: EC2Client;
+  private rdsClient: RDSClient;
+  private s3Client: S3Client;
+  private costExplorerClient: CostExplorerClient;
+  private cloudWatchClient: CloudWatchClient;
+  private iamClient: IAMClient;
 
-export const connectAWSAccount = async (data: ConnectAWSInput) => {
-    const { userId, accountName, accountId, roleArn, externalId } = data;
-  
+  constructor(accessKeyId: string, secretAccessKey: string, region: string = 'us-east-1') {
+    const credentials = { accessKeyId, secretAccessKey };
+    
+    this.ec2Client = new EC2Client({ region, credentials });
+    this.rdsClient = new RDSClient({ region, credentials });
+    this.s3Client = new S3Client({ region, credentials });
+    this.costExplorerClient = new CostExplorerClient({ region: 'us-east-1', credentials }); // CE is only in us-east-1
+    this.cloudWatchClient = new CloudWatchClient({ region, credentials });
+    this.iamClient = new IAMClient({ region: 'us-east-1', credentials }); // IAM is global
+  }
+
+  // ============================================
+  // EC2 INSTANCES
+  // ============================================
+
+  async getEC2Instances() {
     try {
-      // Test the role assumption
-      const stsClient = new STSClient({ region: 'us-east-1' });
-      
-      const command = new AssumeRoleCommand({
-        RoleArn: roleArn,
-        RoleSessionName: 'CloudGuardProTest',
-        ExternalId: externalId,
-        DurationSeconds: 900,
-      });
-  
-      const assumedRole = await stsClient.send(command);
-  
-      if (!assumedRole.Credentials) {
-        throw new Error('Failed to assume role');
+      const command = new DescribeInstancesCommand({});
+      const response = await this.ec2Client.send(command);
+
+      const instances = [];
+      for (const reservation of response.Reservations || []) {
+        for (const instance of reservation.Instances || []) {
+          instances.push({
+            id: instance.InstanceId,
+            name: instance.Tags?.find(tag => tag.Key === 'Name')?.Value || instance.InstanceId,
+            type: instance.InstanceType,
+            state: instance.State?.Name,
+            launchTime: instance.LaunchTime,
+            privateIp: instance.PrivateIpAddress,
+            publicIp: instance.PublicIpAddress,
+            availabilityZone: instance.Placement?.AvailabilityZone,
+            platform: instance.Platform || 'linux',
+            vpcId: instance.VpcId,
+            subnetId: instance.SubnetId,
+            tags: instance.Tags,
+          });
+        }
       }
-  
-      // Encrypt the External ID
-      const encryptedExternalId = encrypt(externalId);
-  
-      // Save to database
-      const cloudAccount = await prisma.cloudAccount.create({
-        data: {
-          userId,
-          provider: 'aws',
-          accountName,
-          accountId,
-          awsRoleArn: roleArn,
-          awsExternalId: encryptedExternalId,
-          isConnected: true,
-          lastSyncAt: new Date(),
-        },
-      });
-  
-      return {
-        id: cloudAccount.id,
-        accountName: cloudAccount.accountName,
-        accountId: cloudAccount.accountId,
-        provider: cloudAccount.provider,
-        isConnected: cloudAccount.isConnected,
-      };
-    } catch (error: any) {
-      console.error('AWS connection error:', error);
-      throw new Error(`Failed to connect AWS account: ${error.message}`);
+
+      return instances;
+    } catch (error) {
+      console.error('Error fetching EC2 instances:', error);
+      throw error;
     }
-  };
+  }
 
-  export const getAWSCosts = async (cloudAccountId: string) => {
+  // ============================================
+  // EBS VOLUMES
+  // ============================================
+
+  async getEBSVolumes() {
     try {
-      const account = await prisma.cloudAccount.findUnique({
-        where: { id: cloudAccountId },
-      });
-  
-      if (!account || !account.awsRoleArn || !account.awsExternalId) {
-        throw new Error('AWS account not found or not properly configured');
-      }
-  
-      const externalId = decrypt(account.awsExternalId);
-  
-      // Assume role
-      const sts = new AWS.STS();
-      const assumedRole = await sts.assumeRole({
-        RoleArn: account.awsRoleArn,
-        RoleSessionName: 'CloudGuardProCostFetch',
-        ExternalId: externalId,
-        DurationSeconds: 900,
-      }).promise();
-  
-      if (!assumedRole.Credentials) {
-        throw new Error('Failed to assume role');
-      }
-  
-      // Create Cost Explorer client
-      const costExplorer = new AWS.CostExplorer({
-        accessKeyId: assumedRole.Credentials.AccessKeyId,
-        secretAccessKey: assumedRole.Credentials.SecretAccessKey,
-        sessionToken: assumedRole.Credentials.SessionToken,
-        region: 'us-east-1',
-      });
-  
-   // Get last complete month (January 2026)
-      const today = new Date();
-      const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastMonthStart = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth(), 1);
-      const lastMonthEnd = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0);
+      const command = new DescribeVolumesCommand({});
+      const response = await this.ec2Client.send(command);
 
-      const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
-      const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
+      return (response.Volumes || []).map(volume => ({
+        id: volume.VolumeId,
+        name: volume.Tags?.find(tag => tag.Key === 'Name')?.Value || volume.VolumeId,
+        size: volume.Size,
+        type: volume.VolumeType,
+        state: volume.State,
+        availabilityZone: volume.AvailabilityZone,
+        encrypted: volume.Encrypted,
+        attachments: volume.Attachments,
+        createTime: volume.CreateTime,
+        tags: volume.Tags,
+      }));
+    } catch (error) {
+      console.error('Error fetching EBS volumes:', error);
+      throw error;
+    }
+  }
 
-   // Get current month dates (February 2026)
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      const startOfMonth = firstDayOfMonth.toISOString().split('T')[0];
-      const endOfMonth = lastDayOfMonth.toISOString().split('T')[0];
-      const currentDate = today.toISOString().split('T')[0];
+  // ============================================
+  // RDS DATABASES
+  // ============================================
 
-      console.log('📅 Last complete month (Jan):', lastMonthStartStr, 'to', lastMonthEndStr);
-      console.log('📅 Current month (Feb):', startOfMonth, 'to', currentDate);
-  
-      // Fetch last complete month costs
-      const lastMonthParams = {
-        TimePeriod: {
-          Start: lastMonthStartStr,
-          End: lastMonthEndStr,
-        },
-        Granularity: 'MONTHLY',
-        Metrics: ['UnblendedCost'],
-      };
-  
-      const lastMonthData = await costExplorer.getCostAndUsage(lastMonthParams).promise();
-      
-      let lastMonthCost = 0;
-      if (lastMonthData.ResultsByTime && lastMonthData.ResultsByTime.length > 0) {
-        lastMonthCost = parseFloat(
-          lastMonthData.ResultsByTime[0].Total?.UnblendedCost?.Amount || '0'
-        );
+  async getRDSInstances() {
+    try {
+      const command = new DescribeDBInstancesCommand({});
+      const response = await this.rdsClient.send(command);
+
+      return (response.DBInstances || []).map(db => ({
+        id: db.DBInstanceIdentifier,
+        name: db.DBInstanceIdentifier,
+        engine: db.Engine,
+        engineVersion: db.EngineVersion,
+        instanceClass: db.DBInstanceClass,
+        status: db.DBInstanceStatus,
+        allocatedStorage: db.AllocatedStorage,
+        availabilityZone: db.AvailabilityZone,
+        multiAZ: db.MultiAZ,
+        publiclyAccessible: db.PubliclyAccessible,
+        encrypted: db.StorageEncrypted,
+        endpoint: db.Endpoint?.Address,
+        port: db.Endpoint?.Port,
+        createTime: db.InstanceCreateTime,
+      }));
+    } catch (error) {
+      console.error('Error fetching RDS instances:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // S3 BUCKETS
+  // ============================================
+
+  async getS3Buckets() {
+    try {
+      const command = new ListBucketsCommand({});
+      const response = await this.s3Client.send(command);
+
+      const buckets = [];
+      for (const bucket of response.Buckets || []) {
+        try {
+          const locationCommand = new GetBucketLocationCommand({ Bucket: bucket.Name });
+          const location = await this.s3Client.send(locationCommand);
+
+          buckets.push({
+            id: bucket.Name,
+            name: bucket.Name,
+            creationDate: bucket.CreationDate,
+            region: location.LocationConstraint || 'us-east-1',
+          });
+        } catch (error) {
+          console.error(`Error getting location for bucket ${bucket.Name}:`, error);
+          buckets.push({
+            id: bucket.Name,
+            name: bucket.Name,
+            creationDate: bucket.CreationDate,
+            region: 'unknown',
+          });
+        }
       }
-  
-      // Fetch current month-to-date costs
-      const currentMonthParams = {
-        TimePeriod: {
-          Start: startOfMonth,
-          End: currentDate,
-        },
-        Granularity: 'MONTHLY',
-        Metrics: ['UnblendedCost'],
-      };
-  
-      const currentMonthData = await costExplorer.getCostAndUsage(currentMonthParams).promise();
-      
-      let currentMonthCost = 0;
-      if (currentMonthData.ResultsByTime && currentMonthData.ResultsByTime.length > 0) {
-        currentMonthCost = parseFloat(
-          currentMonthData.ResultsByTime[0].Total?.UnblendedCost?.Amount || '0'
-        );
-      }
-  
-      // Get forecast for rest of current month
-      let forecastCost = 0;
-      try {
-        const forecastParams = {
-          TimePeriod: {
-            Start: currentDate,
-            End: endOfMonth,
-          },
-          Metric: 'UNBLENDED_COST',
-          Granularity: 'MONTHLY',
-          PredictionIntervalLevel: 80,
-        };
-  
-        const forecastData = await costExplorer.getCostForecast(forecastParams).promise();
-        forecastCost = parseFloat(forecastData.Total?.Amount || '0');
-      } catch (forecastError) {
-        console.error('Forecast error (using MTD only):', forecastError);
-        forecastCost = 0;
-      }
-  
-      const currentMonthEstimate = currentMonthCost + forecastCost;
-  
-      // Fetch 6-month trend
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const startDate = sixMonthsAgo.toISOString().split('T')[0];
-  
-      const trendParams = {
+
+      return buckets;
+    } catch (error) {
+      console.error('Error fetching S3 buckets:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // COST & USAGE
+  // ============================================
+
+  async getCostAndUsage(startDate: string, endDate: string) {
+    try {
+      const command = new GetCostAndUsageCommand({
         TimePeriod: {
           Start: startDate,
-          End: currentDate,
+          End: endDate,
         },
         Granularity: 'MONTHLY',
-        Metrics: ['UnblendedCost'],
-      };
-  
-      const trendData = await costExplorer.getCostAndUsage(trendParams).promise();
-  
-      // Format trend data
-      const costTrend = trendData.ResultsByTime?.map((item) => {
-        const date = new Date(item.TimePeriod?.Start || '');
-        const monthName = date.toLocaleDateString('en-US', { month: 'short' });
-        return {
-          month: monthName,
-          cost: parseFloat(item.Total?.UnblendedCost?.Amount || '0'),
-        };
-      }) || [];
-  
-      // Get costs by service (for pie chart) - use last complete month
-      const serviceParams = {
-        TimePeriod: {
-          Start: lastMonthStartStr,
-          End: lastMonthEndStr,
-        },
-        Granularity: 'MONTHLY',
-        Metrics: ['UnblendedCost'],
+        Metrics: ['UnblendedCost', 'UsageQuantity'],
         GroupBy: [
           {
             Type: 'DIMENSION',
             Key: 'SERVICE',
           },
         ],
-      };
-  
-      const serviceData = await costExplorer.getCostAndUsage(serviceParams).promise();
-  
-      const serviceBreakdown = serviceData.ResultsByTime?.[0]?.Groups?.map((group) => ({
-        name: group.Keys?.[0] || 'Other',
-        value: parseFloat(group.Metrics?.UnblendedCost?.Amount || '0'),
-      }))
-      .filter(item => item.value > 0)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10) || [];
-  
-      console.log('💰 Last complete month (Jan):', lastMonthCost);
-      console.log('📊 Current month MTD:', currentMonthCost);
-      console.log('🔮 Forecast (rest of month):', forecastCost);
-      console.log('🎯 Current month estimate:', currentMonthEstimate);
-      console.log('📈 Cost trend:', costTrend);
-      console.log('🔧 Service breakdown:', serviceBreakdown);
-  
-      return {
-        lastMonthCost: Math.round(lastMonthCost * 100) / 100,
-        currentMonthCost: Math.round(currentMonthCost * 100) / 100,
-        currentMonthEstimate: Math.round(currentMonthEstimate * 100) / 100,
-        forecastCost: Math.round(forecastCost * 100) / 100,
-        costTrend,
-        serviceBreakdown,
-      };
-    } catch (error: any) {
-      console.error('AWS cost fetch error:', error);
-      throw new Error(`Failed to fetch AWS costs: ${error.message}`);
-    }
-  };
-  
+      });
 
+      const response = await this.costExplorerClient.send(command);
+
+      const costData = response.ResultsByTime?.map(result => ({
+        timePeriod: result.TimePeriod,
+        total: parseFloat(result.Total?.UnblendedCost?.Amount || '0'),
+        services: result.Groups?.map(group => ({
+          service: group.Keys?.[0] || 'Unknown',
+          cost: parseFloat(group.Metrics?.UnblendedCost?.Amount || '0'),
+          usage: parseFloat(group.Metrics?.UsageQuantity?.Amount || '0'),
+        })) || [],
+      })) || [];
+
+      return costData;
+    } catch (error) {
+      console.error('Error fetching cost data:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // IAM SECURITY
+  // ============================================
+
+  async getIAMUsers() {
+    try {
+      const command = new ListUsersCommand({});
+      const response = await this.iamClient.send(command);
+
+      return (response.Users || []).map(user => ({
+        userName: user.UserName,
+        userId: user.UserId,
+        arn: user.Arn,
+        createDate: user.CreateDate,
+        passwordLastUsed: user.PasswordLastUsed,
+      }));
+    } catch (error) {
+      console.error('Error fetching IAM users:', error);
+      throw error;
+    }
+  }
+
+  async getSecurityFindings() {
+    try {
+      // Generate credential report
+      await this.iamClient.send(new GenerateCredentialReportCommand({}));
+      
+      // Wait a bit for report generation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const reportCommand = new GetCredentialReportCommand({});
+      const response = await this.iamClient.send(reportCommand);
+
+      // Parse CSV report
+      const reportContent = Buffer.from(response.Content!).toString('utf-8');
+      const lines = reportContent.split('\n');
+      const headers = lines[0].split(',');
+      
+      const findings = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        if (values.length < headers.length) continue;
+
+        const user: any = {};
+        headers.forEach((header, index) => {
+          user[header] = values[index];
+        });
+
+        // Check for security issues
+        if (user.mfa_active === 'false' && user.password_enabled === 'true') {
+          findings.push({
+            severity: 'high',
+            title: 'MFA Not Enabled',
+            resourceType: 'IAM User',
+            resourceId: user.user,
+            description: `User ${user.user} has password authentication enabled but MFA is not active`,
+          });
+        }
+
+        if (user.access_key_1_active === 'true' && user.access_key_1_last_rotated) {
+          const rotationDate = new Date(user.access_key_1_last_rotated);
+          const daysSinceRotation = Math.floor((Date.now() - rotationDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysSinceRotation > 90) {
+            findings.push({
+              severity: 'medium',
+              title: 'Access Key Not Rotated',
+              resourceType: 'IAM User',
+              resourceId: user.user,
+              description: `Access key 1 for ${user.user} has not been rotated in ${daysSinceRotation} days`,
+            });
+          }
+        }
+      }
+
+      return findings;
+    } catch (error) {
+      console.error('Error getting security findings:', error);
+      return [];
+    }
+  }
+
+  // ============================================
+  // CLOUDWATCH METRICS
+  // ============================================
+
+  async getEC2CPUUtilization(instanceId: string, startTime: Date, endTime: Date) {
+    try {
+      const command = new GetMetricStatisticsCommand({
+        Namespace: 'AWS/EC2',
+        MetricName: 'CPUUtilization',
+        Dimensions: [
+          {
+            Name: 'InstanceId',
+            Value: instanceId,
+          },
+        ],
+        StartTime: startTime,
+        EndTime: endTime,
+        Period: 3600, // 1 hour
+        Statistics: ['Average', 'Maximum'],
+      });
+
+      const response = await this.cloudWatchClient.send(command);
+
+      return response.Datapoints?.map(datapoint => ({
+        timestamp: datapoint.Timestamp,
+        average: datapoint.Average,
+        maximum: datapoint.Maximum,
+      })) || [];
+    } catch (error) {
+      console.error('Error fetching CloudWatch metrics:', error);
+      throw error;
+    }
+  }
+}

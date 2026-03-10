@@ -1,166 +1,198 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, AlertCircle } from 'lucide-react';
+import { apiService } from '../services/api.service';
+import { Cloud, Key, Globe, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
 
 const ConnectAWS: React.FC = () => {
   const navigate = useNavigate();
-  const [accountName, setAccountName] = useState('');
-  const [accountId, setAccountId] = useState('');
-  const [roleArn, setRoleArn] = useState('');
-  const [externalId, setExternalId] = useState('');
+  const [formData, setFormData] = useState({
+    accountName: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    region: 'us-east-1',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
-  React.useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const randomId = Math.random().toString(36).substring(2, 15);
-    setExternalId(`cloudguard-${user.id}-${randomId}`);
-  }, []);
+  const regions = [
+    { value: 'us-east-1', label: 'US East (N. Virginia)' },
+    { value: 'us-west-2', label: 'US West (Oregon)' },
+    { value: 'eu-west-1', label: 'EU (Ireland)' },
+    { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
+  ];
 
-  const handleConnect = async () => {
-    if (!accountName || !accountId || !roleArn) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const token = localStorage.getItem('accessToken');
+      const result = await apiService.connectAWSAccount(formData);
+      console.log('✅ AWS account connected:', result);
+      
+      setSuccess(true);
 
-      const response = await fetch('http://localhost:3000/api/cloud/aws/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          accountName,
-          accountId,
-          roleArn,
-          externalId,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('AWS account connected successfully!');
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
         navigate('/dashboard');
-      } else {
-        setError(data.error || 'Failed to connect AWS account');
-      }
-    } catch (err) {
-      setError('Connection failed. Please try again.');
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect AWS account');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200">
-        <div className="container-custom py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Connect AWS Account</h1>
-              <p className="text-gray-600 mt-1">Securely connect your AWS account using IAM Role</p>
-            </div>
-            <button onClick={() => navigate('/dashboard')} className="btn btn-secondary">
-              Cancel
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+      <div className="max-w-2xl w-full">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-500/20 rounded-2xl mb-4">
+            <Cloud className="w-8 h-8 text-orange-400" />
           </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Connect AWS Account</h1>
+          <p className="text-slate-400">
+            Securely connect your AWS account to start monitoring costs and resources
+          </p>
         </div>
-      </div>
 
-      <div className="container-custom py-8">
-        <div className="max-w-2xl mx-auto">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="card">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Connect Your AWS Account</h2>
-            
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  ℹ️ Create an IAM Role in AWS with ViewOnlyAccess policy and use the details below.
-                </p>
-              </div>
-
-              <div>
-                <label className="label">Account Name (Friendly Name)</label>
-                <input
-                  type="text"
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  className="input"
-                  placeholder="Production AWS Account"
-                />
-              </div>
-
-              <div>
-                <label className="label">AWS Account ID</label>
-                <input
-                  type="text"
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                  className="input"
-                  placeholder="123456789012"
-                  maxLength={12}
-                />
-              </div>
-
-              <div>
-                <label className="label">IAM Role ARN</label>
-                <input
-                  type="text"
-                  value={roleArn}
-                  onChange={(e) => setRoleArn(e.target.value)}
-                  className="input"
-                  placeholder="arn:aws:iam::123456789012:role/CloudGuardProRole"
-                />
-              </div>
-
-              <div>
-                <label className="label">External ID</label>
-                <input
-                  type="text"
-                  value={externalId}
-                  readOnly
-                  className="input bg-gray-50"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use this External ID when creating your IAM Role in AWS
-                </p>
-              </div>
-
-              <button
-                onClick={handleConnect}
-                disabled={loading || !accountName || !accountId || !roleArn}
-                className="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="spinner w-5 h-5"></div>
-                    <span>Connecting...</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center gap-2">
-                    <Cloud className="w-5 h-5" />
-                    <span>Connect AWS Account</span>
-                  </div>
-                )}
-              </button>
+        {/* Success Message */}
+        {success && (
+          <div className="mb-6 p-4 bg-green-500/20 border border-green-500/50 rounded-xl flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-green-400" />
+            <div>
+              <p className="text-green-400 font-semibold">AWS Account Connected Successfully!</p>
+              <p className="text-green-300 text-sm">Redirecting to dashboard...</p>
             </div>
           </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <p className="text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Form */}
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Account Name */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                Account Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.accountName}
+                onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
+                placeholder="e.g., Production AWS"
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Access Key ID */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                <Key className="w-4 h-4 inline mr-2" />
+                AWS Access Key ID *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.accessKeyId}
+                onChange={(e) => setFormData({ ...formData, accessKeyId: e.target.value })}
+                placeholder="AKIA..."
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Secret Access Key */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                <Key className="w-4 h-4 inline mr-2" />
+                AWS Secret Access Key *
+              </label>
+              <input
+                type="password"
+                required
+                value={formData.secretAccessKey}
+                onChange={(e) => setFormData({ ...formData, secretAccessKey: e.target.value })}
+                placeholder="Enter your secret access key"
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Region */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                <Globe className="w-4 h-4 inline mr-2" />
+                Primary Region *
+              </label>
+              <select
+                value={formData.region}
+                onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                {regions.map((region) => (
+                  <option key={region.value} value={region.value}>
+                    {region.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+              <h4 className="text-blue-400 font-semibold mb-2 text-sm">Required Permissions</h4>
+              <ul className="text-blue-300 text-xs space-y-1">
+                <li>• Cost Explorer read access</li>
+                <li>• EC2, RDS, S3 describe permissions</li>
+                <li>• IAM read-only access</li>
+                <li>• CloudWatch metrics access</li>
+              </ul>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading || success}
+              className="w-full px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Connecting...
+                </>
+              ) : success ? (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  Connected!
+                </>
+              ) : (
+                <>
+                  Connect AWS Account
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* Setup Guide Link */}
+        <div className="mt-6 text-center">
+          
+            <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-orange-400 hover:text-orange-300 text-sm"
+          >
+            📖 How to create AWS Access Keys &rarr;
+          </a>
         </div>
       </div>
     </div>
