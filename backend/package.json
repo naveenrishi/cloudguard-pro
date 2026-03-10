@@ -1,8 +1,12 @@
 {
+  "name": "cloudguard-pro-backend",
+  "version": "1.0.0",
+  "description": "CloudGuard Pro Backend API",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "NODE_OPTIONS=--openssl-legacy-provider ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "npx prisma generate && tsc",
+    "start": "npx prisma migrate deploy && node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -61,12 +65,9 @@
     "googleapis": "^171.4.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "lucide-react": "^0.575.0",
     "node-cron": "^4.2.1",
     "openai": "^6.27.0",
     "qrcode": "^1.5.4",
-    "react-simple-maps": "^3.0.0",
-    "recharts": "^3.7.0",
     "speakeasy": "^2.0.0"
   }
 }
