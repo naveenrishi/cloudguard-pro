@@ -184,7 +184,7 @@ const DEMO_COMPLIANCE_DATA = {
 };
 
 const Compliance: React.FC = () => {
-  const API_URL = import.meta.env.VITE_API_URL || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}';
+  const API_URL = import.meta.env.VITE_API_URL || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}`;
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const userId = user.id || '';
 
