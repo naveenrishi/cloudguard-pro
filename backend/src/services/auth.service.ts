@@ -38,13 +38,13 @@ export const register = async (data: RegisterInput) => {
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email },
     JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+    { expiresIn: '15m' }
   );
 
   const refreshToken = jwt.sign(
     { userId: user.id },
     JWT_REFRESH_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    { expiresIn: '7d' }
   );
 
   return {
@@ -69,40 +69,21 @@ export const login = async (data: LoginInput) => {
     throw new Error('Invalid credentials');
   }
 
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-    throw new Error(`Account locked. Try again in ${minutesLeft} minutes`);
-  }
-
   const isValidPassword = await bcrypt.compare(password, user.password);
   if (!isValidPassword) {
-    const loginAttempts = user.loginAttempts + 1;
-    let lockedUntil = null;
-    if (loginAttempts >= 5) {
-      lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
-    }
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { loginAttempts, lockedUntil },
-    });
     throw new Error('Invalid credentials');
   }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { loginAttempts: 0, lockedUntil: null },
-  });
 
   const accessToken = jwt.sign(
     { userId: user.id, email: user.email },
     JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+    { expiresIn: '15m' }
   );
 
   const refreshToken = jwt.sign(
     { userId: user.id },
     JWT_REFRESH_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    { expiresIn: '7d' }
   );
 
   try {
@@ -116,7 +97,7 @@ export const login = async (data: LoginInput) => {
       },
     });
   } catch (e) {
-    console.error('Session save failed (non-fatal):', e);
+    // Session table might not exist — non-fatal
   }
 
   return {
