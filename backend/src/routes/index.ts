@@ -8,12 +8,8 @@ import costRoutes from './cost.routes';
 import securityRoutes from './security.routes';
 import optimizationRoutes from './optimization.routes';
 import nukeRoutes from './nuke.routes';
-import migrationRoutes from './migration.routes';
 import resourceRoutes from './resource.routes';
 import userRoutes from './user.routes';
-import budgetRoutes from './budget.routes';
-import analyticsRoutes from './analytics.routes';
-import healthRoutes from './health.routes';
 
 const router = express.Router();
 
@@ -26,11 +22,7 @@ router.use('/cost', costRoutes);
 router.use('/security', securityRoutes);
 router.use('/optimization', optimizationRoutes);
 router.use('/nuke', nukeRoutes);
-router.use('/migration', migrationRoutes);
 router.use('/resources', resourceRoutes);
 router.use('/users', userRoutes);
-router.use('/budgets', budgetRoutes);
-router.use('/analytics', analyticsRoutes);
-router.use('/health', healthRoutes);
 
 export default router;
