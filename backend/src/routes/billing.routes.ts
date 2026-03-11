@@ -1,6 +1,6 @@
 // backend/src/routes/billing.routes.ts
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth.middleware';
 import {
   getInvoices,
   getSpendTrend,
