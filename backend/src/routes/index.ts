@@ -10,6 +10,7 @@ import optimizationRoutes from './optimization.routes';
 import nukeRoutes from './nuke.routes';
 import resourceRoutes from './resource.routes';
 import userRoutes from './user.routes';
+import azureRoutes from './azure.routes';
 
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.use('/optimization', optimizationRoutes);
 router.use('/nuke', nukeRoutes);
 router.use('/resources', resourceRoutes);
 router.use('/users', userRoutes);
+router.use('/azure', azureRoutes);
 
 export default router;
