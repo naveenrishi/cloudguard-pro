@@ -3,7 +3,7 @@ import { Router } from 'express';
 import authRoutes         from './auth.routes';
 import awsRoutes          from './aws.routes';
 import gcpRoutes          from './gcp.routes';
-import cloudAccountRoutes from './cloudAccount.routes';
+import cloudAccountRoutes from './cloudAccounts.routes';
 import costRoutes         from './cost.routes';
 import securityRoutes     from './security.routes';
 import optimizationRoutes from './optimization.routes';
