@@ -12,7 +12,7 @@ import resourceRoutes     from './resource.routes';
 import userRoutes         from './user.routes';
 import analyticsRoutes    from './analytics.routes';
 import budgetRoutes       from './budget.routes';
-import iamRoutes          from './iam.routes';
+import iamRoutes          from './Iam.routes';
 import migrationRoutes    from './migration.routes';
 import servicenowRoutes   from './servicenow.routes';
 import billingRoutes      from './billing.routes';
