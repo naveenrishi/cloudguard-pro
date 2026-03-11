@@ -8,8 +8,6 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   PieChart,
@@ -19,7 +17,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 
@@ -41,12 +38,9 @@ const CostAnalytics: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      
-      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}/costs`);
-      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/cloud/accounts/${accountId}/costs`);
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Real cost data:', data);
         setCostData(data);
       } else {
         const errorData = await response.json();
@@ -101,20 +95,27 @@ const CostAnalytics: React.FC = () => {
   }
 
   const currentMonth = costData.currentMonth || 0;
-  const lastMonth = costData.lastMonth || 0;
-  const forecast = costData.forecast || 0;
-  const services = costData.services || [];
-  
-  const changePercent = lastMonth > 0 
-    ? ((currentMonth - lastMonth) / lastMonth) * 100 
+  const lastMonth    = costData.lastMonth    || 0;
+  const forecast     = costData.forecast     || 0;
+  const services     = costData.services     || [];
+
+  const changePercent = lastMonth > 0
+    ? ((currentMonth - lastMonth) / lastMonth) * 100
     : 0;
-  
+
   const savings = services
     .filter((s: any) => s.name.includes('Reserved'))
-    .reduce((sum: number, s: any) => sum + (s.cost * 0.3), 0);
+    .reduce((sum: number, s: any) => sum + s.cost * 0.3, 0);
+
+  // Real MoM change — calculated once, used for all service rows
+  const momChange = lastMonth > 0
+    ? (((currentMonth - lastMonth) / lastMonth) * 100).toFixed(1)
+    : '0.0';
+  const momIsIncrease = parseFloat(momChange) >= 0;
 
   return (
     <div className="p-6 space-y-6">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -136,17 +137,14 @@ const CostAnalytics: React.FC = () => {
             <p className="text-sm text-gray-600">Current Month</p>
             <DollarSign className="w-5 h-5 text-green-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">
-            ${currentMonth.toFixed(2)}
-          </p>
+          <p className="text-3xl font-bold text-gray-900">${currentMonth.toFixed(2)}</p>
           <div className="flex items-center gap-1 mt-2">
-            {changePercent >= 0 ? (
-              <TrendingUp className="w-4 h-4 text-red-600" />
-            ) : (
-              <TrendingDown className="w-4 h-4 text-green-600" />
-            )}
+            {changePercent >= 0
+              ? <TrendingUp className="w-4 h-4 text-red-600" />
+              : <TrendingDown className="w-4 h-4 text-green-600" />
+            }
             <span className={`text-sm ${changePercent >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {Math.abs(changePercent).toFixed(1)}%
+              {Math.abs(changePercent).toFixed(1)}% vs last month
             </span>
           </div>
         </div>
@@ -156,9 +154,7 @@ const CostAnalytics: React.FC = () => {
             <p className="text-sm text-gray-600">Last Month</p>
             <Calendar className="w-5 h-5 text-blue-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">
-            ${lastMonth.toFixed(2)}
-          </p>
+          <p className="text-3xl font-bold text-gray-900">${lastMonth.toFixed(2)}</p>
           <p className="text-sm text-gray-600 mt-2">Previous period</p>
         </div>
 
@@ -167,9 +163,7 @@ const CostAnalytics: React.FC = () => {
             <p className="text-sm text-gray-600">Forecast</p>
             <TrendingUp className="w-5 h-5 text-purple-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">
-            ${forecast.toFixed(2)}
-          </p>
+          <p className="text-3xl font-bold text-gray-900">${forecast.toFixed(2)}</p>
           <p className="text-sm text-gray-600 mt-2">Projected end of month</p>
         </div>
 
@@ -178,17 +172,30 @@ const CostAnalytics: React.FC = () => {
             <p className="text-sm text-gray-600">Savings Opportunity</p>
             <TrendingDown className="w-5 h-5 text-orange-600" />
           </div>
-          <p className="text-3xl font-bold text-orange-600">
-            ${savings.toFixed(2)}
-          </p>
+          <p className="text-3xl font-bold text-orange-600">${savings.toFixed(2)}</p>
           <p className="text-sm text-gray-600 mt-2">Potential savings</p>
         </div>
       </div>
 
+      {/* Monthly Trend */}
+      {costData.monthlyData && costData.monthlyData.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">12-Month Trend</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={costData.monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" angle={-45} textAnchor="end" height={60} tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={v => `$${v.toFixed(0)}`} />
+              <Tooltip formatter={(v: any) => [`$${v.toFixed(2)}`, 'Cost']} />
+              <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* Service Breakdown */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Breakdown</h3>
-        
         {services.length === 0 ? (
           <p className="text-gray-600 text-center py-8">No service data available</p>
         ) : (
@@ -199,41 +206,34 @@ const CostAnalytics: React.FC = () => {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Service</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Cost</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Percentage</th>
-                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Change</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">MoM Change</th>
                 </tr>
               </thead>
               <tbody>
-                {services.map((service: any, index: number) => {
-                  const randomChange = (Math.random() * 20 - 10).toFixed(1);
-                  const isIncrease = parseFloat(randomChange) >= 0;
-                  
-                  return (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                          />
-                          <span className="text-sm font-medium text-gray-900">
-                            {service.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="text-right py-3 px-4 text-sm font-bold text-gray-900">
-                        ${service.cost.toFixed(2)}
-                      </td>
-                      <td className="text-right py-3 px-4 text-sm text-gray-600">
-                        {service.percentage?.toFixed(1) || '0.0'}%
-                      </td>
-                      <td className="text-right py-3 px-4">
-                        <span className={`text-sm ${isIncrease ? 'text-red-600' : 'text-green-600'}`}>
-                          {isIncrease ? '+' : ''}{randomChange}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {services.map((service: any, index: number) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        />
+                        <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                      </div>
+                    </td>
+                    <td className="text-right py-3 px-4 text-sm font-bold text-gray-900">
+                      ${service.cost.toFixed(2)}
+                    </td>
+                    <td className="text-right py-3 px-4 text-sm text-gray-600">
+                      {service.percentage?.toFixed(1) || '0.0'}%
+                    </td>
+                    <td className="text-right py-3 px-4">
+                      <span className={`text-sm font-medium ${momIsIncrease ? 'text-red-600' : 'text-green-600'}`}>
+                        {momIsIncrease ? '+' : ''}{momChange}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -242,7 +242,6 @@ const CostAnalytics: React.FC = () => {
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Pie Chart */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Distribution</h3>
           {services.length > 0 ? (
@@ -255,9 +254,9 @@ const CostAnalytics: React.FC = () => {
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
-                  label={(entry) => `${entry.name}: $${entry.value.toFixed(0)}`}
+                  label={(entry) => `${entry.name.split(' ')[0]}: $${entry.value.toFixed(0)}`}
                 >
-                  {services.slice(0, 6).map((entry: any, index: number) => (
+                  {services.slice(0, 6).map((_: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -265,32 +264,28 @@ const CostAnalytics: React.FC = () => {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">
-              No data available
-            </div>
+            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
 
-        {/* Bar Chart */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Services</h3>
           {services.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={services.slice(0, 6)}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={v => `$${v.toFixed(0)}`} />
                 <Tooltip formatter={(value: any) => `$${value.toFixed(2)}`} />
-                <Bar dataKey="cost" fill="#3b82f6" />
+                <Bar dataKey="cost" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">
-              No data available
-            </div>
+            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
       </div>
+
     </div>
   );
 };

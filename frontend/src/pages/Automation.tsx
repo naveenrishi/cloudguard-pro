@@ -1,6 +1,6 @@
 // src/pages/Automation.tsx  ← ENHANCED UI — all logic preserved
-// New: stats bar, pinned actions, run-again from history, keyboard search,
-//      enhanced ServiceCard, richer history table, polished wizard
+// Fix: account fetch URL corrected from /api/cloud/accounts/${user.id} → /api/cloud/accounts
+// (the accounts endpoint is not scoped by userId in the URL; userId comes from auth token)
 
 import React, { useState, useEffect, useRef } from 'react';
 import MainLayout from '../components/layout/MainLayout';
@@ -14,7 +14,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 
-// ─── TYPES (unchanged) ───────────────────────────────────────────────────────
+// ─── TYPES ───────────────────────────────────────────────────────────────────
 interface CloudAction {
   id: string; label: string; desc: string;
   risk: 'low' | 'medium' | 'high';
@@ -23,7 +23,7 @@ interface CloudAction {
 interface CloudService { id: string; name: string; icon: string; actions: CloudAction[]; }
 interface ServiceCategory { category: string; icon: any; color: string; bg: string; services: CloudService[]; }
 
-// ─── AWS CATALOG (unchanged) ─────────────────────────────────────────────────
+// ─── AWS CATALOG ─────────────────────────────────────────────────────────────
 const AWS_CATALOG: ServiceCategory[] = [
   { category: 'Compute', icon: Cpu, color: '#f97316', bg: '#fff7ed', services: [
     { id: 'ec2', name: 'EC2', icon: '🖥️', actions: [
@@ -95,7 +95,7 @@ const AWS_CATALOG: ServiceCategory[] = [
   ]},
 ];
 
-// ─── AZURE CATALOG (unchanged) ───────────────────────────────────────────────
+// ─── AZURE CATALOG ───────────────────────────────────────────────────────────
 const AZURE_CATALOG: ServiceCategory[] = [
   { category: 'Compute', icon: Cpu, color: '#2563eb', bg: '#eff6ff', services: [
     { id: 'vm', name: 'Virtual Machines', icon: '🖥️', actions: [
@@ -159,7 +159,7 @@ const AZURE_CATALOG: ServiceCategory[] = [
   ]},
 ];
 
-// ─── GCP CATALOG (unchanged) ─────────────────────────────────────────────────
+// ─── GCP CATALOG ─────────────────────────────────────────────────────────────
 const GCP_CATALOG: ServiceCategory[] = [
   { category: 'Compute', icon: Cpu, color: '#ea4335', bg: '#fef2f2', services: [
     { id: 'gce', name: 'Compute Engine', icon: '🖥️', actions: [
@@ -231,7 +231,6 @@ const ALL_CATALOGS: Record<string, ServiceCategory[]> = {
   aws: AWS_CATALOG, azure: AZURE_CATALOG, gcp: GCP_CATALOG,
 };
 
-// ─── META (unchanged) ─────────────────────────────────────────────────────────
 type Cloud = 'aws' | 'azure' | 'gcp';
 const CLOUD_META = {
   aws:   { label:'Amazon Web Services', emoji:'☁️',  color:'#ea580c', grad:'from-orange-500 to-amber-500'  },
@@ -245,7 +244,7 @@ const RISK_META = {
 };
 const WIZARD_STEPS = ['Task Details','Target','Actions','Code','Review'];
 
-// ─── ENHANCED SERVICE CARD ────────────────────────────────────────────────────
+// ─── SERVICE CARD ─────────────────────────────────────────────────────────────
 const ServiceCard: React.FC<{
   svc: CloudService; cat: ServiceCategory;
   cloud: Cloud; onSelect: (svc: CloudService, action: CloudAction) => void;
@@ -260,7 +259,6 @@ const ServiceCard: React.FC<{
     <div className={`bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 ${open ? 'border-indigo-200 shadow-indigo-50' : 'border-gray-100'}`}>
       <button onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50/80 transition-colors">
-        {/* Service icon + badge */}
         <div className="relative flex-shrink-0">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl shadow-sm" style={{ background: cat.bg }}>
             {svc.icon}
@@ -269,29 +267,18 @@ const ServiceCard: React.FC<{
             <CatIcon size={9} style={{ color: cat.color }}/>
           </div>
         </div>
-
         <div className="flex-1 min-w-0">
           <p className="font-bold text-gray-800 text-sm">{svc.name}</p>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[11px] text-gray-400">{svc.actions.length} actions</span>
-            {highCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-50 text-red-500">
-                {highCount} high risk
-              </span>
-            )}
-            {lowCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600">
-                {lowCount} safe
-              </span>
-            )}
+            {highCount > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-50 text-red-500">{highCount} high risk</span>}
+            {lowCount  > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600">{lowCount} safe</span>}
           </div>
         </div>
-
         <div className="flex items-center gap-1.5">
           {open ? <ChevronUp size={14} className="text-indigo-400"/> : <ChevronDown size={14} className="text-gray-300"/>}
         </div>
       </button>
-
       {open && (
         <div className="border-t border-gray-50">
           {svc.actions.map(action => {
@@ -301,30 +288,20 @@ const ServiceCard: React.FC<{
             return (
               <div key={action.id}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50/60 border-b border-gray-50 last:border-0 group transition-colors">
-
-                {/* Risk dot */}
                 <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }}/>
-
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onSelect(svc, action)}>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors truncate">
-                      {action.label}
-                    </p>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
-                      style={{ background: r.bg, color: r.color }}>{r.label}</span>
+                    <p className="text-sm font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors truncate">{action.label}</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0" style={{ background: r.bg, color: r.color }}>{r.label}</span>
                   </div>
                   <p className="text-xs text-gray-400 truncate mt-0.5">{action.desc}</p>
                 </div>
-
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {/* Pin button */}
                   <button onClick={e => { e.stopPropagation(); onPin(key); }}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                      isPinned ? 'bg-amber-50 text-amber-500' : 'hover:bg-gray-100 text-gray-300 hover:text-amber-400'
-                    }`} title={isPinned ? 'Unpin' : 'Pin action'}>
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isPinned ? 'bg-amber-50 text-amber-500' : 'hover:bg-gray-100 text-gray-300 hover:text-amber-400'}`}
+                    title={isPinned ? 'Unpin' : 'Pin action'}>
                     <Star size={12} className={isPinned ? 'fill-amber-400' : ''}/>
                   </button>
-                  {/* Execute button */}
                   <button onClick={() => onSelect(svc, action)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm shadow-indigo-200">
                     <Play size={10}/> Run
@@ -342,7 +319,8 @@ const ServiceCard: React.FC<{
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const Automation: React.FC = () => {
   const user  = JSON.parse(localStorage.getItem('user') || '{}');
-  const token = localStorage.getItem('accessToken');
+  // ✅ FIX: use 'token' to match rest of app; also support 'accessToken' as fallback
+  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
   const hdrs  = { Authorization:`Bearer ${token}`, 'Content-Type':'application/json' };
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -353,7 +331,6 @@ const Automation: React.FC = () => {
   const [history,     setHistory]     = useState<any[]>([]);
   const [pinned,      setPinned]      = useState<string[]>([]);
 
-  // wizard modal state (all unchanged)
   const [wizOpen,     setWizOpen]     = useState(false);
   const [wizStep,     setWizStep]     = useState(0);
   const [taskName,    setTaskName]    = useState('');
@@ -370,7 +347,6 @@ const Automation: React.FC = () => {
   const [copied,      setCopied]      = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // keyboard shortcut: / to focus search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '/' && !wizOpen && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
@@ -381,18 +357,21 @@ const Automation: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [wizOpen]);
 
+  // ✅ FIX: correct URL — /api/cloud/accounts (no userId in path; auth token identifies user)
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${user.id}`, { headers: hdrs })
-      .then(r=>r.json()).then(d=>{
-        const accs = Array.isArray(d)?d:(d.accounts||[]);
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts`, { headers: hdrs })
+      .then(r => r.json())
+      .then(d => {
+        const accs = Array.isArray(d) ? d : (d.accounts || []);
         setAccounts(accs);
-        const match = accs.find((a:any)=>a.provider?.toLowerCase()===cloud);
+        const match = accs.find((a: any) => a.provider?.toLowerCase() === cloud);
         if (match) setSelAccount(match.id);
-      }).catch(()=>{});
+      })
+      .catch(() => {});
   }, [cloud]);
 
-  useEffect(()=>{ logsEndRef.current?.scrollIntoView({behavior:'smooth'}); },[logs]);
-  useEffect(()=>{ if(selAction && selResource) setCode(selAction.code(selResource)); },[selAction, selResource]);
+  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
+  useEffect(() => { if (selAction && selResource) setCode(selAction.code(selResource)); }, [selAction, selResource]);
 
   const openWizard = (svc: CloudService, action: CloudAction) => {
     setSelService(svc); setSelAction(action);
@@ -403,50 +382,55 @@ const Automation: React.FC = () => {
   };
 
   const closeWizard = () => { setWizOpen(false); setWizStep(0); };
-  const cloudAccounts = accounts.filter(a=>a.provider?.toLowerCase()===cloud);
+  const cloudAccounts = accounts.filter(a => a.provider?.toLowerCase() === cloud);
 
   const canNext = () => {
-    if(wizStep===0) return taskName.trim().length>0;
-    if(wizStep===1) return selResource.trim().length>0;
-    if(wizStep===2) return selAction!==null;
-    if(wizStep===3) return code.trim().length>0;
+    if (wizStep===0) return taskName.trim().length > 0;
+    if (wizStep===1) return selResource.trim().length > 0;
+    if (wizStep===2) return selAction !== null;
+    if (wizStep===3) return code.trim().length > 0;
     return true;
   };
 
-  const addLog = (type:string, msg:string) =>
-    setLogs(p=>[...p,{ts:new Date().toLocaleTimeString(),type,msg}]);
+  const addLog = (type: string, msg: string) =>
+    setLogs(p => [...p, { ts: new Date().toLocaleTimeString(), type, msg }]);
 
   const runExecution = async () => {
     setExecuting(true); setLogs([]); setExecResult(null);
     addLog('info', `Task: ${taskName}`);
-    addLog('info', `Mode: ${isDryRun?'DRY RUN':'LIVE EXECUTE'}`);
+    addLog('info', `Mode: ${isDryRun ? 'DRY RUN' : 'LIVE EXECUTE'}`);
     addLog('info', `Action: ${selAction!.label} on ${selResource}`);
-    await new Promise(r=>setTimeout(r,500));
+    await new Promise(r => setTimeout(r, 500));
     addLog('info', 'Validating credentials...');
-    await new Promise(r=>setTimeout(r,400));
+    await new Promise(r => setTimeout(r, 400));
     addLog('success', 'Credentials valid ✓');
-    await new Promise(r=>setTimeout(r,300));
-    addLog('info', isDryRun?'Dry run — previewing changes only...':'Connecting to cloud API...');
-    await new Promise(r=>setTimeout(r,600));
+    await new Promise(r => setTimeout(r, 300));
+    addLog('info', isDryRun ? 'Dry run — previewing changes only...' : 'Connecting to cloud API...');
+    await new Promise(r => setTimeout(r, 600));
 
-    let finalResult: 'success'|'error' = 'success';
+    let finalResult: 'success' | 'error' = 'success';
+
     if (!isDryRun) {
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/automation/execute`,{
-          method:'POST', headers:hdrs,
-          body:JSON.stringify({cloud, accountId:selAccount, serviceId:selService!.id, actionId:selAction!.id, resourceId:selResource, code, taskName, reason:taskReason}),
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/automation/execute`, {
+          method: 'POST', headers: hdrs,
+          body: JSON.stringify({
+            cloud, accountId: selAccount,
+            serviceId: selService!.id, actionId: selAction!.id,
+            resourceId: selResource, code, taskName, reason: taskReason,
+          }),
         });
         const data = await resp.json();
-        if(!resp.ok) throw new Error(data.error||'Failed');
-        addLog('success', data.message||'Execution successful ✓');
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+        addLog('success', data.message || 'Execution successful ✓');
         finalResult = 'success';
-      } catch(e:any) {
+      } catch (e: any) {
         addLog('error', `Error: ${e.message}`);
         addLog('warn', 'Check credentials and resource ID');
         finalResult = 'error';
       }
     } else {
-      await new Promise(r=>setTimeout(r,300));
+      await new Promise(r => setTimeout(r, 300));
       addLog('success', `Would execute: ${selAction!.label}`);
       addLog('info', `Target resource: ${selResource}`);
       addLog('success', 'Dry run complete — 0 changes made ✓');
@@ -454,76 +438,64 @@ const Automation: React.FC = () => {
     }
 
     setExecResult(finalResult);
-    const newEntry = {
-      id:Date.now(), taskName, cloud, service:selService!.name, serviceIcon:selService!.icon,
-      action:selAction!.label, actionId:selAction!.id, resource:selResource,
-      risk:selAction!.risk,
-      status:isDryRun?'dry-run':(finalResult==='error'?'failed':'success'),
-      ts:new Date().toLocaleString(),
-      // store refs for run-again
+    setHistory(p => [{
+      id: Date.now(), taskName, cloud,
+      service: selService!.name, serviceIcon: selService!.icon,
+      action: selAction!.label, actionId: selAction!.id,
+      resource: selResource, risk: selAction!.risk,
+      status: isDryRun ? 'dry-run' : (finalResult === 'error' ? 'failed' : 'success'),
+      ts: new Date().toLocaleString(),
       _svc: selService, _action: selAction,
-    };
-    setHistory(p=>[newEntry,...p.slice(0,19)]);
+    }, ...p.slice(0, 19)]);
     setExecuting(false);
   };
 
   const handleNext = () => {
-    if(!canNext()) return;
-    if(wizStep<4) { setWizStep(s=>s+1); return; }
+    if (!canNext()) return;
+    if (wizStep < 4) { setWizStep(s => s + 1); return; }
     runExecution();
   };
 
-  // pin toggle
   const togglePin = (key: string) =>
-    setPinned(p => p.includes(key) ? p.filter(k=>k!==key) : [...p, key]);
+    setPinned(p => p.includes(key) ? p.filter(k => k !== key) : [...p, key]);
 
-  // run again from history
   const runAgain = (entry: any) => {
-    if(entry._svc && entry._action) openWizard(entry._svc, entry._action);
+    if (entry._svc && entry._action) openWizard(entry._svc, entry._action);
   };
 
-  // filtered catalog
-  const catalog = ALL_CATALOGS[cloud];
-  const filtered = catalog.map(cat=>({
+  const catalog  = ALL_CATALOGS[cloud];
+  const filtered = catalog.map(cat => ({
     ...cat,
-    services: cat.services.map(svc=>({
+    services: cat.services.map(svc => ({
       ...svc,
-      actions: svc.actions.filter(a=>
+      actions: svc.actions.filter(a =>
         !search || a.label.toLowerCase().includes(search.toLowerCase()) ||
         svc.name.toLowerCase().includes(search.toLowerCase()) ||
         a.desc.toLowerCase().includes(search.toLowerCase())
       ),
-    })).filter(s=>!search||s.actions.length>0),
-  })).filter(c=>!search||c.services.length>0);
+    })).filter(s => !search || s.actions.length > 0),
+  })).filter(c => !search || c.services.length > 0);
 
-  // pinned actions (flat list)
   const pinnedActions = (() => {
-    const results: {svc: CloudService; action: CloudAction; cat: ServiceCategory}[] = [];
+    const results: { svc: CloudService; action: CloudAction; cat: ServiceCategory }[] = [];
     ALL_CATALOGS[cloud].forEach(cat =>
       cat.services.forEach(svc =>
         svc.actions.forEach(action => {
-          if (pinned.includes(`${svc.id}:${action.id}`))
-            results.push({ svc, action, cat });
+          if (pinned.includes(`${svc.id}:${action.id}`)) results.push({ svc, action, cat });
         })
       )
     );
     return results;
   })();
 
-  // stats
-  const successCount  = history.filter(h=>h.status==='success').length;
-  const dryRunCount   = history.filter(h=>h.status==='dry-run').length;
-  const failedCount   = history.filter(h=>h.status==='failed').length;
-
-  // total actions in current cloud
-  const totalActions  = catalog.reduce((s,c)=>s+c.services.reduce((ss,sv)=>ss+sv.actions.length,0),0);
-
+  const successCount = history.filter(h => h.status === 'success').length;
+  const dryRunCount  = history.filter(h => h.status === 'dry-run').length;
+  const failedCount  = history.filter(h => h.status === 'failed').length;
+  const totalActions = catalog.reduce((s, c) => s + c.services.reduce((ss, sv) => ss + sv.actions.length, 0), 0);
   const cm = CLOUD_META[cloud];
 
   return (
     <MainLayout>
-
-      {/* ── PAGE HEADER ──────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -534,14 +506,12 @@ const Automation: React.FC = () => {
           </h1>
           <p className="text-xs text-gray-400 mt-1 ml-10">Execute cloud operations safely with dry-run preview</p>
         </div>
-
-        {/* Stats row */}
         <div className="flex items-center gap-3">
           {[
-            { label:'Total Runs',  value: history.length,  color:'text-gray-700',    bg:'bg-gray-50'    },
-            { label:'Successful',  value: successCount,    color:'text-emerald-700', bg:'bg-emerald-50' },
-            { label:'Dry Runs',    value: dryRunCount,     color:'text-amber-700',   bg:'bg-amber-50'   },
-            { label:'Failed',      value: failedCount,     color:'text-red-700',     bg:'bg-red-50'     },
+            { label:'Total Runs', value: history.length,  color:'text-gray-700',    bg:'bg-gray-50'    },
+            { label:'Successful', value: successCount,    color:'text-emerald-700', bg:'bg-emerald-50' },
+            { label:'Dry Runs',   value: dryRunCount,     color:'text-amber-700',   bg:'bg-amber-50'   },
+            { label:'Failed',     value: failedCount,     color:'text-red-700',     bg:'bg-red-50'     },
           ].map(s => (
             <div key={s.label} className={`${s.bg} rounded-2xl px-4 py-2.5 text-center min-w-[70px]`}>
               <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
@@ -551,37 +521,27 @@ const Automation: React.FC = () => {
         </div>
       </div>
 
-      {/* ── CLOUD TABS ───────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-5">
-        {(Object.keys(CLOUD_META) as Cloud[]).map(c=>{
-          const m=CLOUD_META[c];
-          const cnt=accounts.filter(a=>a.provider?.toLowerCase()===c).length;
-          const catCount = ALL_CATALOGS[c].reduce((s,cat)=>s+cat.services.length,0);
+        {(Object.keys(CLOUD_META) as Cloud[]).map(c => {
+          const m = CLOUD_META[c];
+          const cnt = accounts.filter(a => a.provider?.toLowerCase() === c).length;
+          const catCount = ALL_CATALOGS[c].reduce((s, cat) => s + cat.services.length, 0);
           return (
-            <button key={c} onClick={()=>setCloud(c)}
+            <button key={c} onClick={() => setCloud(c)}
               className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl border-2 font-bold text-sm transition-all ${
-                cloud===c
-                  ? `border-transparent bg-gradient-to-r ${m.grad} text-white shadow-md`
-                  : 'border-gray-100 bg-white text-gray-600 hover:border-gray-200 hover:bg-gray-50'
+                cloud === c ? `border-transparent bg-gradient-to-r ${m.grad} text-white shadow-md` : 'border-gray-100 bg-white text-gray-600 hover:border-gray-200 hover:bg-gray-50'
               }`}>
               <span className="text-lg">{m.emoji}</span>
               <span>{c.toUpperCase()}</span>
               <div className="flex gap-1.5">
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${cloud===c?'bg-white/25 text-white':'bg-gray-100 text-gray-500'}`}>
-                  {catCount} svcs
-                </span>
-                {cnt>0 && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${cloud===c?'bg-white/25 text-white':'bg-indigo-50 text-indigo-600'}`}>
-                    {cnt} acct{cnt!==1?'s':''}
-                  </span>
-                )}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${cloud===c?'bg-white/25 text-white':'bg-gray-100 text-gray-500'}`}>{catCount} svcs</span>
+                {cnt > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${cloud===c?'bg-white/25 text-white':'bg-indigo-50 text-indigo-600'}`}>{cnt} acct{cnt!==1?'s':''}</span>}
               </div>
             </button>
           );
         })}
       </div>
 
-      {/* ── TAB BAR ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-2xl w-fit mb-5">
         {([
           { id:'catalog', label:'Catalog', count: totalActions },
@@ -589,31 +549,21 @@ const Automation: React.FC = () => {
           { id:'history', label:'History', count: history.length },
         ] as const).map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              activeTab===t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab===t.id?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>
             {t.label}
-            {t.count > 0 && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                activeTab===t.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-500'
-              }`}>{t.count}</span>
-            )}
+            {t.count > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab===t.id?'bg-indigo-100 text-indigo-600':'bg-gray-200 text-gray-500'}`}>{t.count}</span>}
           </button>
         ))}
       </div>
 
-      {/* ── HISTORY TAB ──────────────────────────────────────────────────── */}
-      {activeTab==='history' && (
+      {activeTab === 'history' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {history.length===0 ? (
+          {history.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center">
-                <Activity size={22} className="text-gray-300"/>
-              </div>
+              <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center"><Activity size={22} className="text-gray-300"/></div>
               <p className="text-gray-400 text-sm font-medium">No executions yet</p>
               <p className="text-gray-300 text-xs">Run an action from the Catalog to see it here</p>
-              <button onClick={()=>setActiveTab('catalog')}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl mt-1 hover:bg-indigo-700 transition-colors">
+              <button onClick={() => setActiveTab('catalog')} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl mt-1 hover:bg-indigo-700 transition-colors">
                 <Zap size={13}/> Browse catalog
               </button>
             </div>
@@ -621,13 +571,10 @@ const Automation: React.FC = () => {
             <>
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
                 <p className="text-sm font-bold text-gray-700">Execution History ({history.length})</p>
-                <button onClick={() => setHistory([])}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium">
-                  Clear all
-                </button>
+                <button onClick={() => setHistory([])} className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium">Clear all</button>
               </div>
               <div className="divide-y divide-gray-50">
-                {history.map(h=>{
+                {history.map(h => {
                   const statusMeta = h.status==='success'
                     ? { icon:CheckCircle, cls:'text-emerald-600 bg-emerald-50', label:'Success' }
                     : h.status==='dry-run'
@@ -641,24 +588,17 @@ const Automation: React.FC = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-gray-800 truncate max-w-[180px]">{h.taskName}</p>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                            style={{ background:risk.bg, color:risk.color }}>{risk.label}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background:risk.bg, color:risk.color }}>{risk.label}</span>
                           <span className="text-base">{CLOUD_META[h.cloud as Cloud]?.emoji}</span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {h.service} · <span className="font-medium text-gray-500">{h.action}</span> · <span className="font-mono">{h.resource}</span>
-                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{h.service} · <span className="font-medium text-gray-500">{h.action}</span> · <span className="font-mono">{h.resource}</span></p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${statusMeta.cls}`}>
-                          <StatusIcon size={11}/> {statusMeta.label}
-                        </div>
+                        <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${statusMeta.cls}`}><StatusIcon size={11}/> {statusMeta.label}</div>
                         <p className="text-[10px] text-gray-400 mt-0.5">{h.ts}</p>
                       </div>
-                      {/* Run again */}
                       {h._svc && h._action && (
-                        <button onClick={() => runAgain(h)}
-                          title="Run again"
+                        <button onClick={() => runAgain(h)} title="Run again"
                           className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-indigo-100 flex items-center justify-center text-gray-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
                           <RotateCcw size={13}/>
                         </button>
@@ -672,53 +612,36 @@ const Automation: React.FC = () => {
         </div>
       )}
 
-      {/* ── PINNED TAB ───────────────────────────────────────────────────── */}
-      {activeTab==='pinned' && (
+      {activeTab === 'pinned' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {pinnedActions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
-                <Star size={22} className="text-amber-300"/>
-              </div>
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center"><Star size={22} className="text-amber-300"/></div>
               <p className="text-gray-400 text-sm font-medium">No pinned actions</p>
               <p className="text-gray-300 text-xs">Star actions from the Catalog to pin them here</p>
-              <button onClick={()=>setActiveTab('catalog')}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-xl mt-1 hover:bg-amber-600 transition-colors">
+              <button onClick={() => setActiveTab('catalog')} className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-xl mt-1 hover:bg-amber-600 transition-colors">
                 <Star size={13}/> Browse catalog
               </button>
             </div>
           ) : (
             <>
-              <div className="px-5 py-3.5 border-b border-gray-50">
-                <p className="text-sm font-bold text-gray-700">Pinned Actions ({pinnedActions.length})</p>
-              </div>
+              <div className="px-5 py-3.5 border-b border-gray-50"><p className="text-sm font-bold text-gray-700">Pinned Actions ({pinnedActions.length})</p></div>
               <div className="divide-y divide-gray-50">
                 {pinnedActions.map(({ svc, action, cat }) => {
                   const r = RISK_META[action.risk];
-                  const CatIcon = cat.icon;
                   return (
-                    <div key={`${svc.id}:${action.id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/60 transition-colors group">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: cat.bg }}>
-                        {svc.icon}
-                      </div>
+                    <div key={`${svc.id}:${action.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/60 transition-colors group">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: cat.bg }}>{svc.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-gray-800">{action.label}</p>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                            style={{ background:r.bg, color:r.color }}>{r.label}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background:r.bg, color:r.color }}>{r.label}</span>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{svc.name} · {action.desc}</p>
                       </div>
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => togglePin(`${svc.id}:${action.id}`)}
-                          className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-100 flex items-center justify-center text-amber-400 transition-colors">
-                          <Star size={12} className="fill-amber-400"/>
-                        </button>
-                        <button onClick={() => openWizard(svc, action)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors">
-                          <Play size={10}/> Run
-                        </button>
+                        <button onClick={() => togglePin(`${svc.id}:${action.id}`)} className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-100 flex items-center justify-center text-amber-400 transition-colors"><Star size={12} className="fill-amber-400"/></button>
+                        <button onClick={() => openWizard(svc, action)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors"><Play size={10}/> Run</button>
                       </div>
                     </div>
                   );
@@ -729,56 +652,40 @@ const Automation: React.FC = () => {
         </div>
       )}
 
-      {/* ── CATALOG TAB ──────────────────────────────────────────────────── */}
-      {activeTab==='catalog' && (
+      {activeTab === 'catalog' && (
         <>
-          {/* Search with keyboard hint */}
           <div className="relative mb-5">
             <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"/>
-            <input ref={searchRef} value={search} onChange={e=>setSearch(e.target.value)}
+            <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)}
               placeholder={`Search ${cloud.toUpperCase()} services and actions…`}
               className="w-full pl-10 pr-20 py-3 bg-white border border-gray-200 rounded-2xl text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 shadow-sm transition-all"/>
             {search ? (
-              <button onClick={()=>setSearch('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                <X size={14}/>
-              </button>
+              <button onClick={() => setSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14}/></button>
             ) : (
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-mono text-gray-300 bg-gray-100 px-1.5 py-0.5 rounded">
-                /
-              </span>
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-mono text-gray-300 bg-gray-100 px-1.5 py-0.5 rounded">/</span>
             )}
           </div>
-
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Search size={28} className="text-gray-200"/>
               <p className="text-gray-400 text-sm">No actions match "{search}"</p>
-              <button onClick={()=>setSearch('')} className="text-sm text-indigo-600 font-semibold hover:text-indigo-700">
-                Clear search
-              </button>
+              <button onClick={() => setSearch('')} className="text-sm text-indigo-600 font-semibold hover:text-indigo-700">Clear search</button>
             </div>
           ) : (
-            filtered.map(cat=>{
-              const CatIcon=cat.icon;
-              const actionCount = cat.services.reduce((s,sv)=>s+sv.actions.length,0);
+            filtered.map(cat => {
+              const CatIcon = cat.icon;
+              const actionCount = cat.services.reduce((s, sv) => s + sv.actions.length, 0);
               return (
                 <div key={cat.category} className="mb-7">
-                  {/* Category header */}
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm" style={{background:cat.bg}}>
-                      <CatIcon size={16} style={{color:cat.color}}/>
-                    </div>
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm" style={{ background: cat.bg }}><CatIcon size={16} style={{ color: cat.color }}/></div>
                     <h2 className="font-bold text-gray-800">{cat.category}</h2>
                     <div className="h-px flex-1 bg-gray-100"/>
-                    <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
-                      {cat.services.length} services · {actionCount} actions
-                    </span>
+                    <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{cat.services.length} services · {actionCount} actions</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {cat.services.map(svc=>(
-                      <ServiceCard key={svc.id} svc={svc} cat={cat} cloud={cloud}
-                        onSelect={openWizard} pinned={pinned} onPin={togglePin}/>
+                    {cat.services.map(svc => (
+                      <ServiceCard key={svc.id} svc={svc} cat={cat} cloud={cloud} onSelect={openWizard} pinned={pinned} onPin={togglePin}/>
                     ))}
                   </div>
                 </div>
@@ -788,18 +695,11 @@ const Automation: React.FC = () => {
         </>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════
-          WIZARD MODAL — enhanced Presidio UI, all logic identical
-      ══════════════════════════════════════════════════════════════════ */}
       {wizOpen && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{fontFamily:'system-ui,sans-serif'}}>
-
-          {/* Top bar */}
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: 'system-ui,sans-serif' }}>
           <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shadow-sm flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm shadow-indigo-200">
-                <Zap size={14} className="text-white"/>
-              </div>
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm shadow-indigo-200"><Zap size={14} className="text-white"/></div>
               <div>
                 <p className="font-bold text-gray-900 text-sm">Execute Task</p>
                 <p className="text-xs text-gray-400">{selAction?.label}</p>
@@ -808,82 +708,55 @@ const Automation: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-lg">{cm.emoji}</span>
-                <span className="font-semibold text-gray-600">{cloudAccounts.find(a=>a.id===selAccount)?.accountName || cm.label}</span>
+                <span className="font-semibold text-gray-600">{cloudAccounts.find(a => a.id===selAccount)?.accountName || cm.label}</span>
               </div>
               <div className="w-px h-5 bg-gray-200"/>
-              <button onClick={closeWizard}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
-                <X size={16}/>
-              </button>
+              <button onClick={closeWizard} className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"><X size={16}/></button>
             </div>
           </div>
 
           <div className="flex flex-1 min-h-0">
-
-            {/* Left sidebar */}
             <div className="w-56 flex-shrink-0 border-r border-gray-100 bg-white pt-6 px-4 flex flex-col">
               <div className="flex-1">
-                {WIZARD_STEPS.map((s,i)=>(
-                  <div key={i} className={`flex items-center gap-3 py-2.5 px-3 rounded-2xl mb-1 transition-colors ${
-                    i===wizStep ? 'bg-indigo-50' : ''
-                  }`}>
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${
-                      i<wizStep  ? 'bg-indigo-600 text-white' :
-                      i===wizStep? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' :
-                      'bg-gray-100 text-gray-400'
-                    }`}>
-                      {i<wizStep ? <CheckCircle size={14}/> : i+1}
+                {WIZARD_STEPS.map((s, i) => (
+                  <div key={i} className={`flex items-center gap-3 py-2.5 px-3 rounded-2xl mb-1 transition-colors ${i===wizStep?'bg-indigo-50':''}`}>
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${i<wizStep?'bg-indigo-600 text-white':i===wizStep?'bg-indigo-600 text-white shadow-md shadow-indigo-200':'bg-gray-100 text-gray-400'}`}>
+                      {i < wizStep ? <CheckCircle size={14}/> : i+1}
                     </div>
-                    <span className={`text-sm font-semibold transition-colors ${
-                      i===wizStep ? 'text-indigo-700' :
-                      i<wizStep   ? 'text-gray-500'   : 'text-gray-300'
-                    }`}>{s}</span>
+                    <span className={`text-sm font-semibold transition-colors ${i===wizStep?'text-indigo-700':i<wizStep?'text-gray-500':'text-gray-300'}`}>{s}</span>
                   </div>
                 ))}
               </div>
-
-              {/* Mode toggle */}
               <div className="mt-4 mb-6 px-1">
-                <div className={`p-4 rounded-2xl border-2 transition-colors ${isDryRun ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}`}>
+                <div className={`p-4 rounded-2xl border-2 transition-colors ${isDryRun?'bg-amber-50 border-amber-100':'bg-red-50 border-red-100'}`}>
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Execution Mode</p>
                   <div className="flex items-center justify-between mb-1">
-                    <span className={`text-sm font-bold ${isDryRun?'text-amber-700':'text-red-600'}`}>
-                      {isDryRun ? '🧪 Dry Run' : '🚀 Live'}
-                    </span>
-                    <button onClick={()=>setIsDryRun(!isDryRun)}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${isDryRun?'bg-amber-400':'bg-red-500'}`}>
+                    <span className={`text-sm font-bold ${isDryRun?'text-amber-700':'text-red-600'}`}>{isDryRun?'🧪 Dry Run':'🚀 Live'}</span>
+                    <button onClick={() => setIsDryRun(!isDryRun)} className={`relative w-10 h-5 rounded-full transition-colors ${isDryRun?'bg-amber-400':'bg-red-500'}`}>
                       <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${isDryRun?'left-5':'left-0.5'}`}/>
                     </button>
                   </div>
-                  <p className={`text-[11px] ${isDryRun?'text-amber-600':'text-red-500 font-semibold'}`}>
-                    {isDryRun ? 'No real changes will be made' : '⚠ Will affect live resources'}
-                  </p>
+                  <p className={`text-[11px] ${isDryRun?'text-amber-600':'text-red-500 font-semibold'}`}>{isDryRun?'No real changes will be made':'⚠ Will affect live resources'}</p>
                 </div>
               </div>
             </div>
 
-            {/* Main area */}
             <div className="flex-1 overflow-y-auto">
               <div className="p-8 max-w-2xl">
-
-                {/* STEP 0 */}
                 {wizStep===0 && (
                   <>
                     <h2 className="text-lg font-bold text-gray-900 mb-1">Task Details</h2>
                     <p className="text-sm text-gray-400 mb-6">Name this execution and optionally add a reason for audit logs</p>
                     <div className="space-y-5">
                       <div>
-                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
-                          Task Name <span className="text-red-500">*</span>
-                        </label>
-                        <input value={taskName} onChange={e=>setTaskName(e.target.value)}
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Task Name <span className="text-red-500">*</span></label>
+                        <input value={taskName} onChange={e => setTaskName(e.target.value)}
                           className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm text-gray-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all shadow-sm"
                           placeholder="e.g. stop-idle-ec2-instances"/>
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Reason / Notes</label>
-                        <textarea value={taskReason} onChange={e=>setTaskReason(e.target.value)}
-                          rows={4}
+                        <textarea value={taskReason} onChange={e => setTaskReason(e.target.value)} rows={4}
                           className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 resize-none transition-all shadow-sm"
                           placeholder="Why are you running this task? (optional)"/>
                       </div>
@@ -891,21 +764,18 @@ const Automation: React.FC = () => {
                   </>
                 )}
 
-                {/* STEP 1 */}
                 {wizStep===1 && (
                   <>
                     <h2 className="text-lg font-bold text-gray-900 mb-1">Select Target</h2>
                     <p className="text-sm text-gray-400 mb-6">Choose the account and resource to operate on</p>
                     <div className="space-y-5">
-                      {cloudAccounts.length>0 && (
+                      {cloudAccounts.length > 0 && (
                         <div>
                           <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Cloud Account</label>
                           <div className="space-y-2">
-                            {cloudAccounts.map(acc=>(
-                              <button key={acc.id} onClick={()=>setSelAccount(acc.id)}
-                                className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
-                                  selAccount===acc.id ? 'border-indigo-400 bg-indigo-50 shadow-md shadow-indigo-50' : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'
-                                }`}>
+                            {cloudAccounts.map(acc => (
+                              <button key={acc.id} onClick={() => setSelAccount(acc.id)}
+                                className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${selAccount===acc.id?'border-indigo-400 bg-indigo-50 shadow-md shadow-indigo-50':'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'}`}>
                                 <span className="text-2xl">{cm.emoji}</span>
                                 <div className="flex-1">
                                   <p className="font-bold text-gray-800 text-sm">{acc.accountName}</p>
@@ -918,63 +788,46 @@ const Automation: React.FC = () => {
                         </div>
                       )}
                       <div>
-                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
-                          Resource ID <span className="text-red-500">*</span>
-                        </label>
-                        <input value={selResource} onChange={e=>setSelResource(e.target.value)}
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Resource ID <span className="text-red-500">*</span></label>
+                        <input value={selResource} onChange={e => setSelResource(e.target.value)}
                           className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm text-gray-800 font-mono outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all shadow-sm"
-                          placeholder={
-                            cloud==='aws'   ? 'e.g. i-0abc1234def567890' :
-                            cloud==='azure' ? 'Format: resource-group|resource-name' :
-                            'e.g. my-instance-name'
-                          }/>
+                          placeholder={cloud==='aws'?'e.g. i-0abc1234def567890':cloud==='azure'?'Format: resource-group|resource-name':'e.g. my-instance-name'}/>
                         <p className="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
                           <AlertCircle size={11} className="flex-shrink-0"/>
-                          {cloud==='azure' ? 'Use pipe separator: resource-group|resource-name' : 'Find this ID in your cloud console'}
+                          {cloud==='azure'?'Use pipe separator: resource-group|resource-name':'Find this ID in your cloud console'}
                         </p>
                       </div>
                     </div>
                   </>
                 )}
 
-                {/* STEP 2 */}
                 {wizStep===2 && (
                   <>
                     <h2 className="text-lg font-bold text-gray-900 mb-1">Choose Action</h2>
                     <p className="text-sm text-gray-400 mb-5">Select the operation to perform on <code className="bg-gray-100 px-1.5 py-0.5 rounded-lg text-xs font-mono">{selResource}</code></p>
                     <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
-                      {ALL_CATALOGS[cloud].map(cat=>(
-                        cat.services.map(svc=>(
-                          svc.actions.map(action=>{
-                            const r=RISK_META[action.risk];
-                            const isSel=selAction?.id===action.id&&selService?.id===svc.id;
-                            return (
-                              <button key={`${svc.id}-${action.id}`}
-                                onClick={()=>{setSelService(svc);setSelAction(action);}}
-                                className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
-                                  isSel ? 'border-indigo-400 bg-indigo-50 shadow-md shadow-indigo-50'
-                                        : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'
-                                }`}>
-                                <span className="text-2xl flex-shrink-0">{svc.icon}</span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                    <p className={`font-semibold text-sm ${isSel?'text-indigo-700':'text-gray-800'}`}>{action.label}</p>
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                      style={{background:r.bg,color:r.color}}>{r.label}</span>
-                                  </div>
-                                  <p className="text-xs text-gray-400 truncate">{svc.name} · {action.desc}</p>
-                                </div>
-                                {isSel && <CheckCircle size={18} className="text-indigo-600 flex-shrink-0"/>}
-                              </button>
-                            );
-                          })
-                        ))
-                      ))}
+                      {ALL_CATALOGS[cloud].map(cat => cat.services.map(svc => svc.actions.map(action => {
+                        const r = RISK_META[action.risk];
+                        const isSel = selAction?.id===action.id && selService?.id===svc.id;
+                        return (
+                          <button key={`${svc.id}-${action.id}`} onClick={() => { setSelService(svc); setSelAction(action); }}
+                            className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${isSel?'border-indigo-400 bg-indigo-50 shadow-md shadow-indigo-50':'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'}`}>
+                            <span className="text-2xl flex-shrink-0">{svc.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                <p className={`font-semibold text-sm ${isSel?'text-indigo-700':'text-gray-800'}`}>{action.label}</p>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background:r.bg, color:r.color }}>{r.label}</span>
+                              </div>
+                              <p className="text-xs text-gray-400 truncate">{svc.name} · {action.desc}</p>
+                            </div>
+                            {isSel && <CheckCircle size={18} className="text-indigo-600 flex-shrink-0"/>}
+                          </button>
+                        );
+                      })))}
                     </div>
                   </>
                 )}
 
-                {/* STEP 3 */}
                 {wizStep===3 && (
                   <>
                     <h2 className="text-lg font-bold text-gray-900 mb-1">Automation Code</h2>
@@ -982,30 +835,23 @@ const Automation: React.FC = () => {
                     <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
                       <div className="flex items-center justify-between px-4 py-3 bg-gray-900">
                         <div className="flex items-center gap-2">
-                          <div className="flex gap-1.5">
-                            <div className="w-3 h-3 rounded-full bg-red-500"/><div className="w-3 h-3 rounded-full bg-yellow-400"/><div className="w-3 h-3 rounded-full bg-green-500"/>
-                          </div>
+                          <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-red-500"/><div className="w-3 h-3 rounded-full bg-yellow-400"/><div className="w-3 h-3 rounded-full bg-green-500"/></div>
                           <Terminal size={12} className="text-gray-500 ml-2"/>
                           <span className="text-gray-400 text-xs font-mono">{selAction?.id}.py</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <button onClick={()=>{navigator.clipboard?.writeText(code);setCopied(true);setTimeout(()=>setCopied(false),2000);}}
+                          <button onClick={() => { navigator.clipboard?.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                             className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">
-                            {copied ? <CheckCircle size={11} className="text-emerald-400"/> : <Copy size={11}/>}
-                            {copied ? 'Copied!' : 'Copy'}
+                            {copied ? <CheckCircle size={11} className="text-emerald-400"/> : <Copy size={11}/>} {copied?'Copied!':'Copy'}
                           </button>
-                          <button onClick={()=>{
-                            const a=document.createElement('a');
-                            a.href=URL.createObjectURL(new Blob([code],{type:'text/plain'}));
-                            a.download=`${selAction?.id}.py`; a.click();
-                          }} className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">
+                          <button onClick={() => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([code],{type:'text/plain'})); a.download=`${selAction?.id}.py`; a.click(); }}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">
                             <Download size={11}/> Download
                           </button>
                         </div>
                       </div>
-                      <textarea value={code} onChange={e=>setCode(e.target.value)}
-                        className="w-full h-72 p-5 bg-gray-950 text-emerald-400 font-mono text-xs leading-relaxed resize-none outline-none"
-                        spellCheck={false}/>
+                      <textarea value={code} onChange={e => setCode(e.target.value)}
+                        className="w-full h-72 p-5 bg-gray-950 text-emerald-400 font-mono text-xs leading-relaxed resize-none outline-none" spellCheck={false}/>
                     </div>
                     {selAction?.risk==='high' && (
                       <div className="mt-4 flex items-start gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl">
@@ -1019,24 +865,22 @@ const Automation: React.FC = () => {
                   </>
                 )}
 
-                {/* STEP 4 */}
                 {wizStep===4 && (
                   <>
                     <h2 className="text-lg font-bold text-gray-900 mb-1">Review & Execute</h2>
                     <p className="text-sm text-gray-400 mb-5">Verify all details before running</p>
-
                     {execResult===null && !executing && (
                       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                         {[
-                          {label:'Task Name', value:taskName},
-                          {label:'Reason',    value:taskReason||'—'},
-                          {label:'Cloud',     value:`${cm.emoji} ${cloud.toUpperCase()}`},
-                          {label:'Account',   value:cloudAccounts.find(a=>a.id===selAccount)?.accountName||'—'},
-                          {label:'Service',   value:`${selService?.icon} ${selService?.name}`},
-                          {label:'Action',    value:selAction?.label||''},
-                          {label:'Resource',  value:selResource},
-                          {label:'Mode',      value:isDryRun?'🧪 Dry Run':'🚀 Live Execute'},
-                        ].map(row=>(
+                          { label:'Task Name', value: taskName },
+                          { label:'Reason',    value: taskReason || '—' },
+                          { label:'Cloud',     value: `${cm.emoji} ${cloud.toUpperCase()}` },
+                          { label:'Account',   value: cloudAccounts.find(a => a.id===selAccount)?.accountName || '—' },
+                          { label:'Service',   value: `${selService?.icon} ${selService?.name}` },
+                          { label:'Action',    value: selAction?.label || '' },
+                          { label:'Resource',  value: selResource },
+                          { label:'Mode',      value: isDryRun ? '🧪 Dry Run' : '🚀 Live Execute' },
+                        ].map(row => (
                           <div key={row.label} className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50 last:border-0">
                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">{row.label}</span>
                             <span className="text-sm font-semibold text-gray-800">{row.value}</span>
@@ -1044,33 +888,21 @@ const Automation: React.FC = () => {
                         ))}
                       </div>
                     )}
-
                     {(executing || execResult!==null) && (
                       <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-                        <div className={`px-5 py-3.5 flex items-center gap-2.5 border-b border-gray-100 ${
-                          executing?'bg-blue-50':execResult==='success'?'bg-emerald-50':'bg-red-50'
-                        }`}>
+                        <div className={`px-5 py-3.5 flex items-center gap-2.5 border-b border-gray-100 ${executing?'bg-blue-50':execResult==='success'?'bg-emerald-50':'bg-red-50'}`}>
                           {executing && <Loader2 size={15} className="text-blue-600 animate-spin"/>}
                           {execResult==='success' && <CheckCircle size={15} className="text-emerald-600"/>}
                           {execResult==='error'   && <XCircle    size={15} className="text-red-600"/>}
-                          <span className={`text-sm font-bold ${
-                            executing?'text-blue-700':execResult==='success'?'text-emerald-700':'text-red-700'
-                          }`}>
-                            {executing ? 'Executing…' :
-                             execResult==='success'
-                               ? (isDryRun ? 'Dry run complete — no changes made' : 'Execution successful!')
-                               : 'Execution failed'}
+                          <span className={`text-sm font-bold ${executing?'text-blue-700':execResult==='success'?'text-emerald-700':'text-red-700'}`}>
+                            {executing?'Executing…':execResult==='success'?(isDryRun?'Dry run complete — no changes made':'Execution successful!'):'Execution failed'}
                           </span>
                         </div>
                         <div className="bg-gray-950 p-5 h-52 overflow-y-auto font-mono text-xs space-y-1.5">
-                          {logs.map((l,i)=>(
+                          {logs.map((l, i) => (
                             <div key={i} className="flex gap-3">
                               <span className="text-gray-600 flex-shrink-0 tabular-nums">[{l.ts}]</span>
-                              <span className={
-                                l.type==='success' ? 'text-emerald-400' :
-                                l.type==='error'   ? 'text-red-400' :
-                                l.type==='warn'    ? 'text-amber-400' : 'text-gray-400'
-                              }>{l.msg}</span>
+                              <span className={l.type==='success'?'text-emerald-400':l.type==='error'?'text-red-400':l.type==='warn'?'text-amber-400':'text-gray-400'}>{l.msg}</span>
                             </div>
                           ))}
                           {executing && <span className="text-gray-600 animate-pulse">▊</span>}
@@ -1078,21 +910,17 @@ const Automation: React.FC = () => {
                         </div>
                       </div>
                     )}
-
                     {execResult!==null && !executing && (
                       <div className="flex gap-3 mt-5">
-                        <button onClick={closeWizard}
-                          className="flex-1 px-5 py-2.5 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">
-                          Close
-                        </button>
+                        <button onClick={closeWizard} className="flex-1 px-5 py-2.5 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">Close</button>
                         {execResult==='success' && isDryRun && (
-                          <button onClick={()=>{setIsDryRun(false);setExecResult(null);setLogs([]);setExecuting(false);}}
+                          <button onClick={() => { setIsDryRun(false); setExecResult(null); setLogs([]); setExecuting(false); }}
                             className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold transition-all shadow-md shadow-indigo-200">
                             <Play size={13}/> Execute Live
                           </button>
                         )}
                         {execResult==='error' && (
-                          <button onClick={()=>{setExecResult(null);setLogs([]);setExecuting(false);}}
+                          <button onClick={() => { setExecResult(null); setLogs([]); setExecuting(false); }}
                             className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold transition-all">
                             <RefreshCw size={13}/> Retry
                           </button>
@@ -1105,25 +933,19 @@ const Automation: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom bar */}
           {!(wizStep===4 && execResult!==null) && (
             <div className="flex items-center justify-between px-8 py-4 bg-white border-t border-gray-100 shadow-sm flex-shrink-0">
-              <button onClick={()=>wizStep===0?closeWizard():setWizStep(s=>s-1)}
+              <button onClick={() => wizStep===0 ? closeWizard() : setWizStep(s => s-1)}
                 className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-2xl transition-all">
                 {wizStep===0 ? <><X size={13}/> Cancel</> : <><ChevronLeft size={13}/> Back</>}
               </button>
-              <button onClick={handleNext} disabled={!canNext()||executing}
-                className={`flex items-center gap-2 px-7 py-2.5 rounded-2xl text-sm font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md ${
-                  wizStep===4
-                    ? isDryRun ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
-                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
-                }`}>
+              <button onClick={handleNext} disabled={!canNext() || executing}
+                className={`flex items-center gap-2 px-7 py-2.5 rounded-2xl text-sm font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md ${wizStep===4?(isDryRun?'bg-amber-500 hover:bg-amber-600 shadow-amber-200':'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'):'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}`}>
                 {executing
                   ? <><Loader2 size={13} className="animate-spin"/> Running…</>
                   : wizStep===4
                     ? <><Play size={13}/>{isDryRun?'Run Dry Run':'Execute Now'}</>
-                    : <>Next: {WIZARD_STEPS[wizStep+1]} <ChevronRight size={14}/></>
-                }
+                    : <>Next: {WIZARD_STEPS[wizStep+1]} <ChevronRight size={14}/></>}
               </button>
             </div>
           )}

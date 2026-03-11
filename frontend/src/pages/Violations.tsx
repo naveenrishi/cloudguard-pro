@@ -1,315 +1,207 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import {
-  AlertTriangle,
-  XCircle,
-  Clock,
-  CheckCircle,
-  Filter,
-  Search,
-  TrendingDown,
-  TrendingUp,
-  Shield,
-  Database,
-  Server,
-  Lock,
+  AlertTriangle, XCircle, CheckCircle, Search,
+  TrendingDown, Shield, Database, Server, Lock, RefreshCw, AlertCircle,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import axios from 'axios';
 
-// ============================================
-// DEMO DATA
-// ============================================
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const DEMO_VIOLATIONS_DATA = {
-  summary: {
-    totalViolations: 156,
-    criticalViolations: 12,
-    highViolations: 34,
-    mediumViolations: 67,
-    lowViolations: 43,
-    resolvedThisMonth: 45,
-    newThisMonth: 23,
-  },
-  trend: [
-    { month: 'Sep', violations: 178, resolved: 34 },
-    { month: 'Oct', violations: 165, resolved: 38 },
-    { month: 'Nov', violations: 172, resolved: 41 },
-    { month: 'Dec', violations: 168, resolved: 39 },
-    { month: 'Jan', violations: 161, resolved: 42 },
-    { month: 'Feb', violations: 156, resolved: 45 },
-  ],
-  byCategory: [
-    { category: 'Security Group Rules', count: 45, critical: 8 },
-    { category: 'IAM Policies', count: 38, critical: 2 },
-    { category: 'Encryption', count: 28, critical: 1 },
-    { category: 'Logging & Monitoring', count: 24, critical: 1 },
-    { category: 'Network Configuration', count: 21, critical: 0 },
-  ],
-  bySeverity: [
-    { name: 'Critical', value: 12, color: '#dc2626' },
-    { name: 'High', value: 34, color: '#ea580c' },
-    { name: 'Medium', value: 67, color: '#f59e0b' },
-    { name: 'Low', value: 43, color: '#10b981' },
-  ],
-  violations: [
-    {
-      id: 'viol-1',
-      severity: 'critical',
-      category: 'Security Group',
-      title: 'Security Group Allows Unrestricted SSH Access',
-      description: 'Security group sg-0abc123def456 allows SSH (port 22) access from 0.0.0.0/0',
-      resource: 'sg-0abc123def456',
-      resourceType: 'SecurityGroup',
-      region: 'us-east-1',
-      account: 'Production AWS',
-      detectedAt: '2026-02-28T10:30:00Z',
-      status: 'open',
-      ageInDays: 3,
-      impact: 'Allows unrestricted SSH access from the internet, exposing instances to brute force attacks',
-      remediation: 'Restrict SSH access to specific IP ranges or use AWS Systems Manager Session Manager',
-      complianceFrameworks: ['CIS AWS 5.1', 'PCI DSS 1.2.1'],
-    },
-    {
-      id: 'viol-2',
-      severity: 'critical',
-      category: 'S3 Bucket',
-      title: 'S3 Bucket Publicly Accessible',
-      description: 'S3 bucket "prod-user-data" has public read access enabled',
-      resource: 'prod-user-data',
-      resourceType: 'S3Bucket',
-      region: 'us-west-2',
-      account: 'Production AWS',
-      detectedAt: '2026-02-27T14:20:00Z',
-      status: 'open',
-      ageInDays: 4,
-      impact: 'Sensitive user data may be exposed to unauthorized access',
-      remediation: 'Remove public access and use pre-signed URLs or CloudFront for authorized access',
-      complianceFrameworks: ['CIS AWS 2.1.5', 'HIPAA 164.312'],
-    },
-    {
-      id: 'viol-3',
-      severity: 'high',
-      category: 'IAM',
-      title: 'IAM User with Full Administrative Access',
-      description: 'IAM user "developer-john" has the AdministratorAccess policy attached',
-      resource: 'developer-john',
-      resourceType: 'IAMUser',
-      region: 'global',
-      account: 'Production AWS',
-      detectedAt: '2026-02-26T09:15:00Z',
-      status: 'open',
-      ageInDays: 5,
-      impact: 'Excessive privileges increase the risk of accidental or malicious actions',
-      remediation: 'Follow principle of least privilege and grant only necessary permissions',
-      complianceFrameworks: ['CIS AWS 1.16', 'SOC 2 CC6.1'],
-    },
-    {
-      id: 'viol-4',
-      severity: 'high',
-      category: 'Encryption',
-      title: 'EBS Volume Not Encrypted',
-      description: 'EBS volume vol-0xyz789abc123 does not have encryption enabled',
-      resource: 'vol-0xyz789abc123',
-      resourceType: 'EBSVolume',
-      region: 'us-east-1',
-      account: 'Production AWS',
-      detectedAt: '2026-02-25T16:45:00Z',
-      status: 'acknowledged',
-      ageInDays: 6,
-      impact: 'Data at rest is not protected from unauthorized access',
-      remediation: 'Enable EBS encryption and migrate data to encrypted volume',
-      complianceFrameworks: ['CIS AWS 2.2.1', 'PCI DSS 3.4'],
-    },
-    {
-      id: 'viol-5',
-      severity: 'high',
-      category: 'Database',
-      title: 'RDS Instance Publicly Accessible',
-      description: 'RDS instance "prod-db-1" is configured as publicly accessible',
-      resource: 'prod-db-1',
-      resourceType: 'RDSInstance',
-      region: 'us-east-1',
-      account: 'Production AWS',
-      detectedAt: '2026-02-24T11:30:00Z',
-      status: 'open',
-      ageInDays: 7,
-      impact: 'Database is exposed to the internet and vulnerable to attacks',
-      remediation: 'Disable public accessibility and access through VPN or bastion host',
-      complianceFrameworks: ['CIS AWS 2.3.1', 'HIPAA 164.312(a)(1)'],
-    },
-    {
-      id: 'viol-6',
-      severity: 'medium',
-      category: 'Logging',
-      title: 'CloudTrail Not Enabled',
-      description: 'CloudTrail is not enabled in region ap-southeast-1',
-      resource: 'ap-southeast-1',
-      resourceType: 'Region',
-      region: 'ap-southeast-1',
-      account: 'Production AWS',
-      detectedAt: '2026-02-23T08:20:00Z',
-      status: 'open',
-      ageInDays: 8,
-      impact: 'API activity is not being logged, reducing audit capability',
-      remediation: 'Enable CloudTrail in all active regions',
-      complianceFrameworks: ['CIS AWS 3.1'],
-    },
-    {
-      id: 'viol-7',
-      severity: 'medium',
-      category: 'IAM',
-      title: 'MFA Not Enabled for IAM User',
-      description: 'IAM user "api-service-account" does not have MFA enabled',
-      resource: 'api-service-account',
-      resourceType: 'IAMUser',
-      region: 'global',
-      account: 'Production AWS',
-      detectedAt: '2026-02-22T13:10:00Z',
-      status: 'acknowledged',
-      ageInDays: 9,
-      impact: 'Account is vulnerable to credential theft',
-      remediation: 'Enable virtual or hardware MFA device for all IAM users',
-      complianceFrameworks: ['CIS AWS 1.2', 'SOC 2 CC6.1'],
-    },
-    {
-      id: 'viol-8',
-      severity: 'low',
-      title: 'Unused Elastic IP',
-      category: 'Network',
-      description: 'Elastic IP 54.123.45.67 is not associated with any instance',
-      resource: 'eip-54.123.45.67',
-      resourceType: 'ElasticIP',
-      region: 'us-west-2',
-      account: 'Production AWS',
-      detectedAt: '2026-02-21T15:40:00Z',
-      status: 'open',
-      ageInDays: 10,
-      impact: 'Unnecessary cost for unused resource',
-      remediation: 'Release unused Elastic IPs',
-      complianceFrameworks: [],
-    },
-  ],
-};
+// ── Map raw finding → violation ────────────────────────────────────────────
+function findingToViolation(f: any, idx: number) {
+  const severity = (f.severity || 'MEDIUM').toUpperCase();
+  const sevLower = severity.toLowerCase();
 
+  // Infer category from title/description
+  const text = `${f.title} ${f.description}`.toLowerCase();
+  const category =
+    text.includes('mfa')       ? 'IAM' :
+    text.includes('iam')       ? 'IAM' :
+    text.includes('s3')        ? 'S3 Bucket' :
+    text.includes('rds')       ? 'Database' :
+    text.includes('sg') || text.includes('security group') ? 'Security Group' :
+    text.includes('encrypt')   ? 'Encryption' :
+    text.includes('cloudtrail')|| text.includes('log')     ? 'Logging' :
+    text.includes('vpc') || text.includes('network')       ? 'Network' :
+    'Security';
+
+  const detectedAt = new Date(Date.now() - idx * 86400000).toISOString();
+  const ageInDays  = idx + 1;
+
+  return {
+    id: `viol-${idx}`,
+    severity: sevLower,
+    category,
+    title: f.title,
+    description: f.description || f.title,
+    resource: f.resource || 'Unknown resource',
+    resourceType: f.resourceType || category,
+    region: f.region || 'us-east-1',
+    account: f.account || 'Cloud Account',
+    detectedAt,
+    status: severity === 'CRITICAL' || severity === 'HIGH' ? 'open' : 'acknowledged',
+    ageInDays,
+    impact: f.description || 'Security finding that may expose your environment to risk.',
+    remediation: f.remediation || 'Review and remediate this finding according to best practices.',
+    complianceFrameworks: f.compliance || [],
+  };
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
 const Violations: React.FC = () => {
-  const API_URL = import.meta.env.VITE_API_URL || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}`;
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const userId = user.id || '';
+  const { accountId } = useParams<{ accountId: string }>();
 
-  const [violationsData, setViolationsData] = useState<any>(DEMO_VIOLATIONS_DATA);
-  const [loading, setLoading] = useState(false);
+  const [violations, setViolations]   = useState<any[]>([]);
+  const [securityScore, setScore]     = useState(0);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus]     = useState('all');
+  const [searchQuery, setSearchQuery]       = useState('');
 
-  useEffect(() => {
-    fetchViolationsData();
-  }, []);
-
-  const fetchViolationsData = async () => {
+  const fetchData = useCallback(async () => {
+    if (!accountId) return;
     setLoading(true);
+    setError(null);
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      if (!userId || !token) {
-        console.log('🎨 No user account, showing demo violations data');
-        setViolationsData(DEMO_VIOLATIONS_DATA);
-        setLoading(false);
-        return;
-      }
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const response = await axios.get(`${API_URL}/api/violations/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      
-      setViolationsData(response.data);
-    } catch (error) {
-      console.log('Error fetching violations data, using demo:', error);
-      setViolationsData(DEMO_VIOLATIONS_DATA);
+      const res = await fetch(`${API}/api/cloud/accounts/${accountId}/security`, { headers });
+      if (!res.ok) throw new Error(`Security API returned ${res.status}`);
+      const data = await res.json();
+
+      setScore(data.score || 0);
+      const viols = (data.findings || []).map(findingToViolation);
+      setViolations(viols);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load violations');
     } finally {
       setLoading(false);
     }
+  }, [accountId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Derived stats ─────────────────────────────────────────────────────────
+  const summary = {
+    total:    violations.length,
+    critical: violations.filter(v => v.severity === 'critical').length,
+    high:     violations.filter(v => v.severity === 'high').length,
+    medium:   violations.filter(v => v.severity === 'medium').length,
+    low:      violations.filter(v => v.severity === 'low').length,
+    open:     violations.filter(v => v.status === 'open').length,
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'critical': return 'bg-red-100 text-red-700 border-red-300';
-      case 'high': return 'bg-orange-100 text-orange-700 border-orange-300';
-      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
-      case 'low': return 'bg-green-100 text-green-700 border-green-300';
-      default: return 'bg-gray-100 text-gray-700 border-gray-300';
-    }
-  };
+  const bySeverity = [
+    { name: 'Critical', value: summary.critical, color: '#dc2626' },
+    { name: 'High',     value: summary.high,     color: '#ea580c' },
+    { name: 'Medium',   value: summary.medium,   color: '#f59e0b' },
+    { name: 'Low',      value: summary.low,      color: '#10b981' },
+  ].filter(s => s.value > 0);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open': return 'bg-red-100 text-red-700';
-      case 'acknowledged': return 'bg-yellow-100 text-yellow-700';
-      case 'resolved': return 'bg-green-100 text-green-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  const getCategoryIcon = (category: string) => {
-    switch (category.toLowerCase()) {
-      case 'security group':
-      case 'network':
-        return <Shield className="w-5 h-5" />;
-      case 'database':
-      case 's3 bucket':
-        return <Database className="w-5 h-5" />;
-      case 'iam':
-      case 'encryption':
-        return <Lock className="w-5 h-5" />;
-      default:
-        return <Server className="w-5 h-5" />;
-    }
-  };
-
-  const filteredViolations = violationsData.violations.filter((violation: any) => {
-    const matchesSeverity = filterSeverity === 'all' || violation.severity === filterSeverity;
-    const matchesStatus = filterStatus === 'all' || violation.status === filterStatus;
-    const matchesSearch = !searchQuery || 
-      violation.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      violation.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      violation.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesSeverity && matchesStatus && matchesSearch;
+  // Group by category for bar chart
+  const categoryMap: Record<string, { count: number; critical: number }> = {};
+  violations.forEach(v => {
+    if (!categoryMap[v.category]) categoryMap[v.category] = { count: 0, critical: 0 };
+    categoryMap[v.category].count++;
+    if (v.severity === 'critical') categoryMap[v.category].critical++;
   });
+  const byCategory = Object.entries(categoryMap).map(([category, vals]) => ({ category, ...vals }));
+
+  // ── Filtering ─────────────────────────────────────────────────────────────
+  const filtered = violations.filter(v => {
+    const matchSev    = filterSeverity === 'all' || v.severity === filterSeverity;
+    const matchStatus = filterStatus   === 'all' || v.status   === filterStatus;
+    const matchSearch = !searchQuery ||
+      v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchSev && matchStatus && matchSearch;
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getSeverityColor = (s: string) => ({
+    critical: 'bg-red-100 text-red-700 border-red-300',
+    high:     'bg-orange-100 text-orange-700 border-orange-300',
+    medium:   'bg-yellow-100 text-yellow-700 border-yellow-300',
+    low:      'bg-green-100 text-green-700 border-green-300',
+  }[s] || 'bg-gray-100 text-gray-700 border-gray-300');
+
+  const getStatusColor = (s: string) => ({
+    open:         'bg-red-100 text-red-700',
+    acknowledged: 'bg-yellow-100 text-yellow-700',
+    resolved:     'bg-green-100 text-green-700',
+  }[s] || 'bg-gray-100 text-gray-700');
+
+  const getCategoryIcon = (cat: string) => {
+    const c = cat.toLowerCase();
+    if (c.includes('security group') || c.includes('network')) return <Shield className="w-5 h-5" />;
+    if (c.includes('database') || c.includes('s3'))             return <Database className="w-5 h-5" />;
+    if (c.includes('iam') || c.includes('encrypt'))             return <Lock className="w-5 h-5" />;
+    return <Server className="w-5 h-5" />;
+  };
+
+  const handleAcknowledge = (id: string) => {
+    setViolations(prev => prev.map(v => v.id === id ? { ...v, status: 'acknowledged' } : v));
+  };
+
+  const handleResolve = (id: string) => {
+    setViolations(prev => prev.map(v => v.id === id ? { ...v, status: 'resolved' } : v));
+  };
+
+  // ── Loading / Error ───────────────────────────────────────────────────────
+  if (loading) return (
+    <div className="p-6 flex items-center justify-center h-64">
+      <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
+      <span className="ml-3 text-gray-500">Loading security violations...</span>
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-6">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+        <div>
+          <h3 className="font-semibold text-red-900">Error Loading Violations</h3>
+          <p className="text-red-700 text-sm mt-1">{error}</p>
+          <button onClick={fetchData} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">Retry</button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6 space-y-6">
+
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Security Violations</h1>
-        <p className="text-gray-600 mt-1">Monitor and remediate security policy violations</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Security Violations</h1>
+          <p className="text-gray-600 mt-1">
+            Live findings from {accountId} · Security score: <span className={`font-bold ${securityScore >= 70 ? 'text-green-600' : securityScore >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>{securityScore}/100</span>
+          </p>
+        </div>
+        <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <RefreshCw className="w-4 h-4 text-gray-500" />
+        </button>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-gray-600">Total Violations</p>
             <AlertTriangle className="w-5 h-5 text-blue-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">{violationsData.summary.totalViolations}</p>
+          <p className="text-3xl font-bold text-gray-900">{summary.total}</p>
           <div className="flex items-center gap-1 mt-2">
             <TrendingDown className="w-4 h-4 text-green-600" />
-            <p className="text-sm text-green-600">-{violationsData.summary.resolvedThisMonth} this month</p>
+            <p className="text-sm text-green-600">{summary.total - summary.open} acknowledged/resolved</p>
           </div>
         </div>
 
@@ -318,8 +210,8 @@ const Violations: React.FC = () => {
             <p className="text-sm text-gray-600">Critical</p>
             <XCircle className="w-5 h-5 text-red-600" />
           </div>
-          <p className="text-3xl font-bold text-red-600">{violationsData.summary.criticalViolations}</p>
-          <p className="text-sm text-gray-600 mt-2">Requires immediate action</p>
+          <p className="text-3xl font-bold text-red-600">{summary.critical}</p>
+          <p className="text-sm text-gray-600 mt-2">Immediate action required</p>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
@@ -327,218 +219,188 @@ const Violations: React.FC = () => {
             <p className="text-sm text-gray-600">High Severity</p>
             <AlertTriangle className="w-5 h-5 text-orange-600" />
           </div>
-          <p className="text-3xl font-bold text-orange-600">{violationsData.summary.highViolations}</p>
+          <p className="text-3xl font-bold text-orange-600">{summary.high}</p>
           <p className="text-sm text-gray-600 mt-2">High priority items</p>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-gray-600">Resolved</p>
-            <CheckCircle className="w-5 h-5 text-green-600" />
+            <p className="text-sm text-gray-600">Open</p>
+            <AlertCircle className="w-5 h-5 text-yellow-600" />
           </div>
-          <p className="text-3xl font-bold text-green-600">{violationsData.summary.resolvedThisMonth}</p>
-          <p className="text-sm text-gray-600 mt-2">This month</p>
+          <p className="text-3xl font-bold text-yellow-600">{summary.open}</p>
+          <p className="text-sm text-gray-600 mt-2">Awaiting remediation</p>
         </div>
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Violations Trend */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations Trend</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={violationsData.trend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="violations" stroke="#ef4444" strokeWidth={2} name="Active Violations" />
-              <Line type="monotone" dataKey="resolved" stroke="#10b981" strokeWidth={2} name="Resolved" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* By Severity */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations by Severity</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={violationsData.bySeverity}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {violationsData.bySeverity.map((entry: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* By Category */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations by Category</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={violationsData.byCategory}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="category" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="count" fill="#3b82f6" name="Total" />
-            <Bar dataKey="critical" fill="#dc2626" name="Critical" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap gap-4 items-center">
-          {/* Search */}
-          <div className="flex-1 min-w-[300px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search violations..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+      {violations.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations by Severity</h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={bySeverity}
+                  cx="50%" cy="50%"
+                  outerRadius={100}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={false}
+                >
+                  {bySeverity.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
 
-          {/* Severity Filter */}
-          <select
-            value={filterSeverity}
-            onChange={(e) => setFilterSeverity(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
+          {byCategory.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations by Category</h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={byCategory}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="count"    fill="#3b82f6" name="Total"    radius={[4,4,0,0]} />
+                  <Bar dataKey="critical" fill="#dc2626" name="Critical" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search & Filters */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex-1 min-w-[250px] relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search violations..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+          <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
-
-          {/* Status Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
             <option value="all">All Statuses</option>
             <option value="open">Open</option>
             <option value="acknowledged">Acknowledged</option>
             <option value="resolved">Resolved</option>
           </select>
+          <span className="text-sm text-gray-500">{filtered.length} of {violations.length} shown</span>
         </div>
       </div>
 
       {/* Violations List */}
       <div className="space-y-4">
-        {filteredViolations.map((violation: any) => (
-          <div key={violation.id} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start gap-4 flex-1">
-                <div className="p-3 bg-gray-100 rounded-lg">
-                  {getCategoryIcon(violation.category)}
+        {filtered.map(v => (
+          <div key={v.id} className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-gray-100 rounded-lg flex-shrink-0">
+                {getCategoryIcon(v.category)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getSeverityColor(v.severity)}`}>
+                    {v.severity.toUpperCase()}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(v.status)}`}>
+                    {v.status.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-500">{v.category}</span>
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getSeverityColor(violation.severity)}`}>
-                      {violation.severity.toUpperCase()}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(violation.status)}`}>
-                      {violation.status.toUpperCase()}
-                    </span>
-                    <span className="text-xs text-gray-500">{violation.category}</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{violation.title}</h3>
-                  <p className="text-gray-600 mb-3">{violation.description}</p>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                    <div>
-                      <p className="text-gray-500">Resource</p>
-                      <p className="font-mono text-gray-900">{violation.resource}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Region</p>
-                      <p className="text-gray-900">{violation.region}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Account</p>
-                      <p className="text-gray-900">{violation.account}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Age</p>
-                      <p className="text-gray-900">{violation.ageInDays} days</p>
-                    </div>
-                  </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">{v.title}</h3>
+                <p className="text-gray-600 text-sm mb-3">{v.description}</p>
 
-                  <div className="bg-red-50 rounded-lg p-3 mb-3">
-                    <p className="text-sm font-semibold text-red-900 mb-1">Impact:</p>
-                    <p className="text-sm text-red-800">{violation.impact}</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                  <div>
+                    <p className="text-gray-500">Resource</p>
+                    <p className="font-mono text-gray-900 truncate text-xs">{v.resource}</p>
                   </div>
-
-                  <div className="bg-blue-50 rounded-lg p-3 mb-3">
-                    <p className="text-sm font-semibold text-blue-900 mb-1">Remediation:</p>
-                    <p className="text-sm text-blue-800">{violation.remediation}</p>
+                  <div>
+                    <p className="text-gray-500">Region</p>
+                    <p className="text-gray-900">{v.region}</p>
                   </div>
+                  <div>
+                    <p className="text-gray-500">Detected</p>
+                    <p className="text-gray-900">{v.ageInDays}d ago</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Account</p>
+                    <p className="text-gray-900 truncate">{v.account}</p>
+                  </div>
+                </div>
 
-                  {violation.complianceFrameworks && violation.complianceFrameworks.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      <p className="text-sm text-gray-600">Related Compliance:</p>
-                      {violation.complianceFrameworks.map((framework: string, idx: number) => (
-                        <span key={idx} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                          {framework}
-                        </span>
-                      ))}
-                    </div>
+                <div className="bg-blue-50 rounded-lg p-3 mb-3">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">Remediation:</p>
+                  <p className="text-sm text-blue-800">{v.remediation}</p>
+                </div>
+
+                {v.complianceFrameworks.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <p className="text-sm text-gray-600 self-center">Compliance:</p>
+                    {v.complianceFrameworks.map((fw: string, i: number) => (
+                      <span key={i} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">{fw}</span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                  {v.status !== 'resolved' && (
+                    <button onClick={() => handleResolve(v.id)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                      Mark Resolved
+                    </button>
                   )}
+                  {v.status === 'open' && (
+                    <button onClick={() => handleAcknowledge(v.id)}
+                      className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-sm">
+                      Acknowledge
+                    </button>
+                  )}
+                  <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
+                    Create Ticket
+                  </button>
                 </div>
               </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                Remediate
-              </button>
-              <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
-                Acknowledge
-              </button>
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                Create Ticket
-              </button>
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                Suppress
-              </button>
             </div>
           </div>
         ))}
       </div>
 
-      {filteredViolations.length === 0 && (
+      {/* Empty states */}
+      {violations.length === 0 && (
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-gray-900 mb-2">No Violations Found</h3>
-          <p className="text-gray-600">
-            {searchQuery || filterSeverity !== 'all' || filterStatus !== 'all'
-              ? 'Try adjusting your filters'
-              : 'All security policies are compliant'}
-          </p>
+          <p className="text-gray-600">No security findings were returned for this account.</p>
         </div>
       )}
+
+      {violations.length > 0 && filtered.length === 0 && (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-gray-900 mb-2">No Matching Violations</h3>
+          <p className="text-gray-600">Try adjusting your filters or search query.</p>
+        </div>
+      )}
+
     </div>
   );
 };

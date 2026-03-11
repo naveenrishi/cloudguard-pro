@@ -89,11 +89,12 @@ export const login = async (data: LoginInput) => {
   try {
     await prisma.session.create({
       data: {
-        userId: user.id,
+        userId:       user.id,
+        token:        accessToken,
         refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        ipAddress: '',
-        userAgent: '',
+        expiresAt:    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ipAddress:    '',
+        userAgent:    '',
       },
     });
   } catch (e) {
