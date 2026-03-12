@@ -1,8 +1,4 @@
 import express from 'express';
-import * as analyticsService from '../services/analytics/analytics.service';
-import * as changeTrackingService from '../services/analytics/change-tracking.service';
-import * as aiAnalysisService from '../services/analytics/ai-analysis.service';
-import * as demoData from '../services/analytics/demo-data.service';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middleware/auth.middleware';
 
@@ -26,8 +22,6 @@ async function fetchAccountCosts(account: any): Promise<{ provider: string; name
     const creds = JSON.parse(decrypt(account.credentials || '{}'));
     const provider = account.provider?.toUpperCase();
 
-    // Call the existing cost endpoint internally via the same logic
-    // We use a lightweight fetch to the running server itself
     const SELF = process.env.SELF_URL || 'http://localhost:3000';
     const res = await fetch(`${SELF}/api/cloud/accounts/${account.id}/costs`);
     if (!res.ok) throw new Error(`Cost fetch failed: ${res.status}`);
@@ -45,10 +39,7 @@ async function fetchAccountCosts(account: any): Promise<{ provider: string; name
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW: /api/analytics/multi-cloud?period=6m   ← called by AdvancedAnalytics
-// Returns month-by-month spend split by provider
-// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/multi-cloud?period=6m
 router.get('/multi-cloud', authenticateToken, async (req: any, res) => {
   try {
     const userId  = req.user?.id || req.user?.userId;
@@ -60,9 +51,7 @@ router.get('/multi-cloud', authenticateToken, async (req: any, res) => {
 
     const allCosts = await Promise.all(accounts.map(fetchAccountCosts));
 
-    // Build a unified month map
     const monthMap: Record<string, { month: string; AWS: number; Azure: number; GCP: number }> = {};
-
     allCosts.forEach(({ provider, monthlyData }) => {
       monthlyData.slice(-months).forEach(m => {
         const key = m.month;
@@ -81,10 +70,7 @@ router.get('/multi-cloud', authenticateToken, async (req: any, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW: /api/analytics/services?period=6m   ← called by AdvancedAnalytics
-// Returns top services aggregated across all accounts
-// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/services?period=6m
 router.get('/services', authenticateToken, async (req: any, res) => {
   try {
     const userId  = req.user?.id || req.user?.userId;
@@ -93,7 +79,6 @@ router.get('/services', authenticateToken, async (req: any, res) => {
 
     const allCosts = await Promise.all(accounts.map(fetchAccountCosts));
 
-    // Aggregate services across all accounts
     const serviceMap: Record<string, { name: string; cost: number; provider: string }> = {};
     const COLORS = ['#6366f1','#06b6d4','#f59e0b','#10b981','#2563eb','#0891b2','#7c3aed','#ec4899','#f97316','#94a3b8'];
 
@@ -121,10 +106,7 @@ router.get('/services', authenticateToken, async (req: any, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW: /api/analytics/forecast   ← called by AdvancedAnalytics
-// Returns actual + 3-month forecast based on real monthly trend
-// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/forecast
 router.get('/forecast', authenticateToken, async (req: any, res) => {
   try {
     const userId   = req.user?.id || req.user?.userId;
@@ -133,7 +115,6 @@ router.get('/forecast', authenticateToken, async (req: any, res) => {
 
     const allCosts = await Promise.all(accounts.map(fetchAccountCosts));
 
-    // Merge all accounts into a single monthly total
     const monthMap: Record<string, number> = {};
     allCosts.forEach(({ monthlyData }) => {
       monthlyData.forEach(m => {
@@ -145,7 +126,6 @@ router.get('/forecast', authenticateToken, async (req: any, res) => {
       .map(([month, total]) => ({ month, total }))
       .slice(-6);
 
-    // Simple linear forecast: avg growth over last 3 months
     const recent = actuals.slice(-3).map(m => m.total);
     const avgGrowth = recent.length >= 2
       ? (recent[recent.length - 1] - recent[0]) / (recent.length - 1)
@@ -161,13 +141,13 @@ router.get('/forecast', authenticateToken, async (req: any, res) => {
         month:    MONTH_NAMES[d.getMonth()],
         actual:   null,
         forecast: Math.round(lastTotal + avgGrowth * i),
-        budget:   Math.round((lastTotal + avgGrowth * i) * 1.1), // 10% buffer as budget
+        budget:   Math.round((lastTotal + avgGrowth * i) * 1.1),
       };
     });
 
     const data = [
       ...actuals.map(m => ({
-        month:    m.month.split(' ')[0], // "Mar 2026" → "Mar"
+        month:    m.month.split(' ')[0],
         actual:   Math.round(m.total),
         forecast: null,
         budget:   Math.round(m.total * 1.1),
@@ -180,117 +160,6 @@ router.get('/forecast', authenticateToken, async (req: any, res) => {
     console.error('forecast analytics error:', e.message);
     res.status(500).json({ error: e.message });
   }
-});
-
-// ============================================
-// EXISTING ROUTES (unchanged)
-// ============================================
-
-router.get('/dashboard/:cloudAccountId/:userId', async (req, res) => {
-  try {
-    const { cloudAccountId, userId } = req.params;
-    if (process.env.DEMO_MODE === 'true') {
-      const demoDashboard = {
-        cost: demoData.generateDemoCostData(cloudAccountId),
-        utilization: demoData.generateDemoUtilizationData(),
-        security: demoData.generateDemoSecurityData(),
-        performance: demoData.generateDemoPerformanceData(),
-        business: demoData.generateDemoBusinessData(),
-        insights: demoData.generateDemoInsights(),
-        generatedAt: new Date(),
-      };
-      return res.json(demoDashboard);
-    }
-    const dashboard = await analyticsService.getComprehensiveDashboard(cloudAccountId, userId);
-    res.json(dashboard);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/cost/:cloudAccountId', async (req, res) => {
-  try {
-    const data = await analyticsService.getCostIntelligence(req.params.cloudAccountId, parseInt(req.query.days as string) || 30);
-    res.json(data);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/utilization/:cloudAccountId', async (req, res) => {
-  try {
-    const data = await analyticsService.getResourceUtilization(req.params.cloudAccountId, parseInt(req.query.hours as string) || 24);
-    res.json(data);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/security/:cloudAccountId', async (req, res) => {
-  try {
-    const data = await analyticsService.getSecurityCompliance(req.params.cloudAccountId);
-    res.json(data);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/performance/:cloudAccountId', async (req, res) => {
-  try {
-    const data = await analyticsService.getPerformanceAnalytics(req.params.cloudAccountId, parseInt(req.query.hours as string) || 24);
-    res.json(data);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/business/:userId', async (req, res) => {
-  try {
-    const data = await analyticsService.getBusinessIntelligence(req.params.userId, parseInt(req.query.months as string) || 3);
-    res.json(data);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/changes/:cloudAccountId', async (req, res) => {
-  try {
-    const { cloudAccountId } = req.params;
-    if (process.env.DEMO_MODE === 'true') return res.json(demoData.generateDemoChanges(cloudAccountId));
-    const filters = {
-      startTime:    req.query.startTime ? new Date(req.query.startTime as string) : undefined,
-      endTime:      req.query.endTime   ? new Date(req.query.endTime   as string) : undefined,
-      resourceType: req.query.resourceType as string,
-      changedBy:    req.query.changedBy    as string,
-      changeType:   req.query.changeType   as string,
-    };
-    const changes = await changeTrackingService.getUnifiedChangeTimeline(cloudAccountId, filters);
-    res.json(changes);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.post('/changes/sync/:cloudAccountId', async (req, res) => {
-  try {
-    const { cloudAccountId } = req.params;
-    if (process.env.DEMO_MODE === 'true') return res.json({ message: 'Changes synced (demo)', changeCount: 50, success: true });
-    const result = await changeTrackingService.syncChangesToTimeline(cloudAccountId);
-    res.json(result);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/incidents/:cloudAccountId', async (req, res) => {
-  try {
-    const { cloudAccountId } = req.params;
-    if (process.env.DEMO_MODE === 'true') return res.json(demoData.generateDemoIncidents());
-    const incidents = await aiAnalysisService.getIncidents(cloudAccountId);
-    res.json(incidents);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.post('/incidents', async (req, res) => {
-  try {
-    if (process.env.DEMO_MODE === 'true') return res.json({ id: 'demo-' + Date.now(), ...req.body, status: 'investigating', createdAt: new Date() });
-    const incident = await aiAnalysisService.createIncident(req.body);
-    res.json(incident);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-router.get('/incidents/:incidentId/analysis', async (req, res) => {
-  try {
-    if (process.env.DEMO_MODE === 'true') return res.json({ incidentId: req.params.incidentId, rootCauses: [], resolutionSteps: [], generatedAt: new Date() });
-    const analysis = await aiAnalysisService.analyzeIncident(req.params.incidentId);
-    res.json(analysis);
-  } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
 export default router;
