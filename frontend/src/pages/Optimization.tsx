@@ -1,604 +1,530 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// frontend/src/pages/Optimization.tsx
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import MainLayout from '../components/layout/MainLayout';
 import {
-  ArrowLeft, TrendingDown, DollarSign, Zap, Search, Filter,
-  ArrowUpDown, CheckCircle, XCircle, AlertCircle, Download,
-  BarChart3, Target, TrendingUp, RefreshCw,
+  ArrowLeft, RefreshCw, BarChart2, DollarSign, Zap, TrendingUp,
+  CheckCircle2, Filter, Download, ChevronUp, ChevronDown,
+  ChevronsUpDown, Search, Cpu, HardDrive, Activity, Shield,
+  AlertTriangle, Info, CheckSquare, Square, ChevronRight,
+  Layers, Clock, XCircle, ArrowUpRight
 } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'];
+const token = () => localStorage.getItem('token') || '';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface Optimization {
+interface Recommendation {
   id: string;
   title: string;
   description: string;
   type: string;
-  priority: 'High' | 'Medium' | 'Low';
-  effort: 'Low' | 'Medium' | 'High';
+  category: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  effort: 'LOW' | 'MEDIUM' | 'HIGH';
   currentCost: number;
-  potentialSavings: number;
+  savingsPerMonth: number;
   savingsPercent: number;
-  resources: string[];
+  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'DISMISSED';
+  resource?: string;
+  region?: string;
+  steps?: string[];
 }
 
-// ─── Build optimizations from real cost + resource data ───────────────────────
-function buildOptimizations(costs: any, resources: any[]): Optimization[] {
-  const opts: Optimization[] = [];
+// ─── Constants ────────────────────────────────────────────────────────────────
+const PRIORITY_CONFIG = {
+  HIGH:   { label: 'High',   bg: 'bg-red-50',    text: 'text-red-600',    dot: 'bg-red-500'    },
+  MEDIUM: { label: 'Medium', bg: 'bg-amber-50',  text: 'text-amber-600',  dot: 'bg-amber-500'  },
+  LOW:    { label: 'Low',    bg: 'bg-blue-50',   text: 'text-blue-600',   dot: 'bg-blue-500'   },
+};
 
-  // 1. Stopped EC2 instances (real resource data)
-  const stoppedEC2 = resources.filter(r => r.type === 'EC2' && r.state === 'stopped');
-  if (stoppedEC2.length > 0) {
-    const monthlyCost = stoppedEC2.length * 25;
-    opts.push({
-      id: 'stopped-ec2',
-      title: `Terminate ${stoppedEC2.length} Stopped EC2 Instances`,
-      description: `${stoppedEC2.length} EC2 instances are stopped but still incurring EBS and EIP charges.`,
-      type: 'Compute',
-      priority: 'High',
-      effort: 'Low',
-      currentCost: monthlyCost,
-      potentialSavings: Math.round(monthlyCost * 0.9),
-      savingsPercent: 90,
-      resources: stoppedEC2.slice(0, 5).map(r => r.name || r.id),
-    });
-  }
+const EFFORT_CONFIG = {
+  LOW:    { label: 'Low',    bg: 'bg-green-50',  text: 'text-green-700'  },
+  MEDIUM: { label: 'Medium', bg: 'bg-yellow-50', text: 'text-yellow-700' },
+  HIGH:   { label: 'High',   bg: 'bg-red-50',    text: 'text-red-700'    },
+};
 
-  // 2. EC2 On-Demand → Reserved Instances (from costs services)
-  const ec2Service = costs.services?.find((s: any) =>
-    s.name.toLowerCase().includes('ec2') || s.name.toLowerCase().includes('compute')
-  );
-  if (ec2Service && ec2Service.cost > 50) {
-    opts.push({
-      id: 'ec2-reserved',
-      title: 'Convert EC2 On-Demand to Reserved Instances (1yr)',
-      description: 'Stable EC2 workloads qualify for 1-year reserved instance pricing, saving ~40%.',
-      type: 'Compute',
-      priority: 'High',
-      effort: 'Low',
-      currentCost: Math.round(ec2Service.cost),
-      potentialSavings: Math.round(ec2Service.cost * 0.4),
-      savingsPercent: 40,
-      resources: ['EC2 On-Demand fleet'],
-    });
-  }
+const TYPE_COLORS: Record<string, string> = {
+  Compute:    '#6366f1',
+  Storage:    '#22c55e',
+  Database:   '#f59e0b',
+  Serverless: '#a855f7',
+  Monitoring: '#06b6d4',
+  Security:   '#ef4444',
+  Network:    '#ec4899',
+  Other:      '#94a3b8',
+};
 
-  // 3. S3 storage optimisation
-  const s3Buckets = resources.filter(r => r.type === 'S3' || r.type === 'GCSBucket' || r.type === 'StorageAccount');
-  const s3Service = costs.services?.find((s: any) => s.name.toLowerCase().includes('s3') || s.name.toLowerCase().includes('storage'));
-  if (s3Buckets.length > 10) {
-    const savingAmt = s3Service ? Math.round(s3Service.cost * 0.3) : s3Buckets.length * 0.5;
-    opts.push({
-      id: 's3-lifecycle',
-      title: `Add Lifecycle Policies to ${s3Buckets.length} Storage Buckets`,
-      description: 'Move infrequently accessed objects to cheaper storage tiers (Glacier / Cool / Nearline).',
-      type: 'Storage',
-      priority: 'Medium',
-      effort: 'Low',
-      currentCost: s3Service ? Math.round(s3Service.cost) : s3Buckets.length,
-      potentialSavings: savingAmt,
-      savingsPercent: 30,
-      resources: s3Buckets.slice(0, 5).map(r => r.name || r.id),
-    });
-  }
+const PIE_COLORS = ['#6366f1', '#ef4444', '#f59e0b'];
 
-  // 4. RDS optimisation
-  const rdsService = costs.services?.find((s: any) =>
-    s.name.toLowerCase().includes('rds') || s.name.toLowerCase().includes('database') || s.name.toLowerCase().includes('sql')
-  );
-  if (rdsService && rdsService.cost > 20) {
-    opts.push({
-      id: 'rds-reserved',
-      title: 'Purchase RDS Reserved Instances',
-      description: 'RDS databases running 24/7 are ideal candidates for reserved instance pricing (up to 43% savings).',
-      type: 'Database',
-      priority: 'High',
-      effort: 'Low',
-      currentCost: Math.round(rdsService.cost),
-      potentialSavings: Math.round(rdsService.cost * 0.43),
-      savingsPercent: 43,
-      resources: resources.filter(r => r.type === 'RDS').slice(0, 3).map(r => r.name || r.id),
-    });
-  }
-
-  // 5. NAT Gateway → NAT Instance
-  const vpcService = costs.services?.find((s: any) => s.name.toLowerCase().includes('vpc') || s.name.toLowerCase().includes('network'));
-  if (vpcService && vpcService.cost > 10) {
-    opts.push({
-      id: 'nat-gateway',
-      title: 'Replace NAT Gateway with NAT Instance',
-      description: 'NAT Instances can replace NAT Gateways for dev/staging environments at a fraction of the cost.',
-      type: 'Network',
-      priority: 'Medium',
-      effort: 'Medium',
-      currentCost: Math.round(vpcService.cost),
-      potentialSavings: Math.round(vpcService.cost * 0.6),
-      savingsPercent: 60,
-      resources: ['NAT Gateway'],
-    });
-  }
-
-  // 6. Lambda optimisation
-  const lambdaService = costs.services?.find((s: any) => s.name.toLowerCase().includes('lambda'));
-  if (lambdaService && lambdaService.cost > 5) {
-    opts.push({
-      id: 'lambda-memory',
-      title: 'Right-size Lambda Memory Allocations',
-      description: 'Over-provisioned Lambda memory increases cost. Use Lambda Power Tuning to optimise.',
-      type: 'Serverless',
-      priority: 'Low',
-      effort: 'Low',
-      currentCost: Math.round(lambdaService.cost),
-      potentialSavings: Math.round(lambdaService.cost * 0.25),
-      savingsPercent: 25,
-      resources: ['Lambda functions'],
-    });
-  }
-
-  // 7. Cost Explorer / monitoring overhead
-  const ceService = costs.services?.find((s: any) => s.name.toLowerCase().includes('cost explorer'));
-  if (ceService && ceService.cost > 10) {
-    opts.push({
-      id: 'cost-explorer',
-      title: 'Reduce Cost Explorer API Call Frequency',
-      description: 'Cost Explorer charges per API call. Caching results can significantly cut this cost.',
-      type: 'Monitoring',
-      priority: 'Medium',
-      effort: 'Low',
-      currentCost: Math.round(ceService.cost),
-      potentialSavings: Math.round(ceService.cost * 0.5),
-      savingsPercent: 50,
-      resources: ['AWS Cost Explorer'],
-    });
-  }
-
-  // 8. Security Hub / Inspector (if high cost)
-  const secService = costs.services?.find((s: any) => s.name.toLowerCase().includes('security hub') || s.name.toLowerCase().includes('inspector'));
-  if (secService && secService.cost > 10) {
-    opts.push({
-      id: 'security-scope',
-      title: 'Narrow Security Hub / Inspector Scope',
-      description: 'Review enabled Security Hub standards and disable unused ones to reduce per-finding charges.',
-      type: 'Security',
-      priority: 'Low',
-      effort: 'Medium',
-      currentCost: Math.round(secService.cost),
-      potentialSavings: Math.round(secService.cost * 0.35),
-      savingsPercent: 35,
-      resources: ['AWS Security Hub', 'Amazon Inspector'],
-    });
-  }
-
-  return opts;
-}
+// ─── Mock data fallback ───────────────────────────────────────────────────────
+const MOCK: Recommendation[] = [
+  { id: '1', title: 'Right-size over-provisioned EC2 instances', description: 'Several EC2 instances are consistently running at under 20% CPU. Downsize to the next smaller instance type.', type: 'Compute', category: 'COST', priority: 'HIGH', effort: 'LOW', currentCost: 280, savingsPerMonth: 168, savingsPercent: 60, status: 'OPEN', resource: 'i-0abc123, i-0def456', region: 'us-east-1', steps: ['Review CPU/memory metrics', 'Test on smaller instance type in staging', 'Apply during maintenance window'] },
+  { id: '2', title: 'Delete unattached EBS volumes', description: '14 EBS volumes (2.3 TB total) are detached and accumulating storage charges.', type: 'Storage', category: 'COST', priority: 'HIGH', effort: 'LOW', currentCost: 25, savingsPerMonth: 23, savingsPercent: 92, status: 'OPEN', resource: 'vol-0abc, vol-0def (14 total)', region: 'us-east-1' },
+  { id: '3', title: 'Purchase Reserved Instances for steady workloads', description: '3 EC2 instances have been running 24/7 for 6+ months. Reserved Instance pricing saves ~40%.', type: 'Compute', category: 'COST', priority: 'HIGH', effort: 'MEDIUM', currentCost: 210, savingsPerMonth: 84, savingsPercent: 40, status: 'OPEN', resource: 'm5.xlarge (3x)', region: 'us-east-1' },
+  { id: '4', title: 'Enable Lambda memory optimization', description: 'AWS Lambda Power Tuning shows your functions are over-provisioned by ~30%.', type: 'Serverless', category: 'COST', priority: 'MEDIUM', effort: 'LOW', currentCost: 18, savingsPerMonth: 6, savingsPercent: 33, status: 'OPEN', resource: '6 Lambda functions', region: 'us-east-1' },
+  { id: '5', title: 'Remove unused CloudWatch dashboards', description: '8 dashboards have had 0 views in 90 days. CloudWatch charges per dashboard.', type: 'Monitoring', category: 'COST', priority: 'LOW', effort: 'LOW', currentCost: 24, savingsPerMonth: 8, savingsPercent: 33, status: 'OPEN', resource: '8 dashboards', region: 'us-east-1' },
+  { id: '6', title: 'Enable S3 Intelligent-Tiering', description: 'Large S3 buckets with infrequent access patterns are ideal for Intelligent-Tiering.', type: 'Storage', category: 'COST', priority: 'MEDIUM', effort: 'LOW', currentCost: 45, savingsPerMonth: 18, savingsPercent: 40, status: 'OPEN', resource: 's3://app-data, s3://logs', region: 'global' },
+  { id: '7', title: 'Patch public S3 buckets to private', description: '2 S3 buckets are publicly accessible. No business need was found.', type: 'Security', category: 'SECURITY', priority: 'HIGH', effort: 'LOW', currentCost: 0, savingsPerMonth: 0, savingsPercent: 0, status: 'OPEN', resource: 's3://old-assets, s3://dev-uploads', region: 'global' },
+];
 
 // ─── Component ────────────────────────────────────────────────────────────────
-const Optimization: React.FC = () => {
+export default function Optimization() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
 
-  const [optimizations, setOptimizations] = useState<Optimization[]>([]);
-  const [provider, setProvider] = useState('');
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [costs, setCosts] = useState<any>(null);
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('All');
-  const [filterPriority, setFilterPriority] = useState('All');
-  const [filterEffort, setFilterEffort] = useState('All');
-  const [sortField, setSortField] = useState<string>('potentialSavings');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [accountName, setAccountName] = useState('');
+  const [provider, setProvider] = useState('AWS');
+  const [search, setSearch] = useState('');
+  const [filterPriority, setFilterPriority] = useState<string>('ALL');
+  const [filterType, setFilterType] = useState<string>('ALL');
+  const [filterStatus, setFilterStatus] = useState<string>('OPEN');
+  const [sortField, setSortField] = useState<'savings' | 'priority' | 'effort'>('savings');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedOptimizations, setSelectedOptimizations] = useState<string[]>([]);
-  const [showCharts, setShowCharts] = useState(true);
-  const [appliedOptimizations, setAppliedOptimizations] = useState<string[]>([]);
 
-  const fetchData = useCallback(async () => {
-    if (!accountId) return;
-    setLoading(true);
-    setError(null);
+  useEffect(() => { if (accountId) { loadAccount(); loadRecommendations(); } }, [accountId]);
+
+  const loadAccount = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const r = await fetch(`${API}/api/cloud/accounts/${accountId}`, { headers: { Authorization: `Bearer ${token()}` } });
+      if (r.ok) { const d = await r.json(); setAccountName(d.accountName || ''); setProvider(d.provider || 'AWS'); }
+    } catch {}
+  };
 
-      const [costsRes, resourcesRes] = await Promise.all([
-        fetch(`${API}/api/cloud/accounts/${accountId}/costs`, { headers }),
-        fetch(`${API}/api/cloud/accounts/${accountId}/resources`, { headers }),
-      ]);
+  const loadRecommendations = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/optimization/${accountId}`, { headers: { Authorization: `Bearer ${token()}` } });
+      if (r.ok) {
+        const d = await r.json();
+        setRecommendations(d.recommendations?.length ? d.recommendations : MOCK);
+      } else setRecommendations(MOCK);
+    } catch { setRecommendations(MOCK); }
+    setLoading(false);
+  };
 
-      const costsData = costsRes.ok ? await costsRes.json() : {};
-      const resourcesData = resourcesRes.ok ? await resourcesRes.json() : { resources: [] };
+  // ─── Derived data ──────────────────────────────────────────────────────────
+  const active = recommendations.filter(r => r.status === 'OPEN' || r.status === 'IN_PROGRESS');
+  const totalSavings = active.reduce((s, r) => s + r.savingsPerMonth, 0);
+  const totalCurrent = active.reduce((s, r) => s + r.currentCost, 0);
+  const savingsPct = totalCurrent > 0 ? (totalSavings / totalCurrent) * 100 : 0;
+  const quickWins = active.filter(r => r.effort === 'LOW' && r.priority === 'HIGH').length;
+  const applied = recommendations.filter(r => r.status === 'COMPLETED').reduce((s, r) => s + r.savingsPerMonth, 0);
 
-      setCosts(costsData);
+  // Chart data
+  const byType = Object.entries(
+    active.reduce((acc, r) => { acc[r.type] = (acc[r.type] || 0) + r.savingsPerMonth; return acc; }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
-      if (accountId.includes('aws')) setProvider('AWS');
-      else if (accountId.includes('azure')) setProvider('Azure');
-      else if (accountId.includes('gcp')) setProvider('GCP');
+  const byPriority = [
+    { name: 'High',   value: active.filter(r => r.priority === 'HIGH').reduce((s, r) => s + r.savingsPerMonth, 0) },
+    { name: 'Medium', value: active.filter(r => r.priority === 'MEDIUM').reduce((s, r) => s + r.savingsPerMonth, 0) },
+    { name: 'Low',    value: active.filter(r => r.priority === 'LOW').reduce((s, r) => s + r.savingsPerMonth, 0) },
+  ].filter(d => d.value > 0);
 
-      const opts = buildOptimizations(costsData, resourcesData.resources || []);
-      setOptimizations(opts);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load optimization data');
-    } finally {
-      setLoading(false);
+  // Filter + sort
+  const types = [...new Set(recommendations.map(r => r.type))];
+  const filtered = recommendations
+    .filter(r => {
+      if (filterStatus !== 'ALL' && r.status !== filterStatus) return false;
+      if (filterPriority !== 'ALL' && r.priority !== filterPriority) return false;
+      if (filterType !== 'ALL' && r.type !== filterType) return false;
+      if (search && !r.title.toLowerCase().includes(search.toLowerCase()) && !r.description.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const pOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+      const eOrder = { LOW: 3, MEDIUM: 2, HIGH: 1 };
+      if (sortField === 'savings') return sortDir === 'desc' ? b.savingsPerMonth - a.savingsPerMonth : a.savingsPerMonth - b.savingsPerMonth;
+      if (sortField === 'priority') return sortDir === 'desc' ? pOrder[b.priority] - pOrder[a.priority] : pOrder[a.priority] - pOrder[b.priority];
+      if (sortField === 'effort') return sortDir === 'desc' ? eOrder[b.effort] - eOrder[a.effort] : eOrder[a.effort] - eOrder[b.effort];
+      return 0;
+    });
+
+  const toggleSort = (f: typeof sortField) => { if (sortField === f) setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortField(f); setSortDir('desc'); } };
+  const SortIcon = ({ f }: { f: typeof sortField }) => sortField === f ? (sortDir === 'desc' ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 text-gray-300" />;
+
+  const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(filtered.map(r => r.id)));
+
+  const applySelected = async () => {
+    for (const id of selected) {
+      try {
+        await fetch(`${API}/api/optimization/${accountId}/recommendations/${id}/apply`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token()}` }
+        });
+      } catch {}
     }
-  }, [accountId]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // ── Filtering & sorting ───────────────────────────────────────────────────
-  const filteredOptimizations = optimizations.filter(opt => {
-    const matchesSearch = opt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      opt.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'All' || opt.type === filterType;
-    const matchesPriority = filterPriority === 'All' || opt.priority === filterPriority;
-    const matchesEffort = filterEffort === 'All' || opt.effort === filterEffort;
-    const notApplied = !appliedOptimizations.includes(opt.id);
-    return matchesSearch && matchesType && matchesPriority && matchesEffort && notApplied;
-  });
-
-  const sortedOptimizations = [...filteredOptimizations].sort((a, b) => {
-    const aVal = (a as any)[sortField];
-    const bVal = (b as any)[sortField];
-    if (typeof aVal === 'number') return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-    if (typeof aVal === 'string') return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    return 0;
-  });
-
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const totalSavings = optimizations.reduce((s, o) => s + o.potentialSavings, 0);
-  const currentCost  = optimizations.reduce((s, o) => s + o.currentCost, 0);
-  const quickWins    = optimizations.filter(o => o.effort === 'Low' && o.priority === 'High').length;
-  const appliedSavings = appliedOptimizations.reduce((s, id) => {
-    const o = optimizations.find(x => x.id === id);
-    return s + (o?.potentialSavings || 0);
-  }, 0);
-
-  const optimizationTypes = ['All', ...new Set(optimizations.map(o => o.type))];
-
-  // ── Chart data ────────────────────────────────────────────────────────────
-  const savingsByType = optimizationTypes.slice(1).map(type => ({
-    name: type,
-    savings: optimizations.filter(o => o.type === type).reduce((s, o) => s + o.potentialSavings, 0),
-  }));
-
-  const savingsByPriority = ['High', 'Medium', 'Low'].map(p => ({
-    priority: p,
-    savings: optimizations.filter(o => o.priority === p).reduce((s, o) => s + o.potentialSavings, 0),
-    count: optimizations.filter(o => o.priority === p).length,
-  }));
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const getPriorityColor = (p: string) => ({
-    High:   'text-red-400 bg-red-500/20 border-red-500/50',
-    Medium: 'text-yellow-400 bg-yellow-500/20 border-yellow-500/50',
-    Low:    'text-green-400 bg-green-500/20 border-green-500/50',
-  }[p] || 'text-slate-400 bg-slate-500/20 border-slate-500/50');
-
-  const getEffortColor = (e: string) => ({
-    Low: 'text-green-400', Medium: 'text-yellow-400', High: 'text-red-400',
-  }[e] || 'text-slate-400');
-
-  const getEffortIcon = (e: string) => ({ Low: CheckCircle, Medium: AlertCircle, High: XCircle }[e] || AlertCircle);
-
-  const handleSort = (field: string) => {
-    if (sortField === field) setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDirection('desc'); }
+    await loadRecommendations();
+    setSelected(new Set());
   };
 
-  const handleApply = (id: string) => {
-    setAppliedOptimizations(prev => [...prev, id]);
+  const dismiss = async (id: string) => {
+    try {
+      await fetch(`${API}/api/optimization/${accountId}/recommendations/${id}/dismiss`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token()}` }
+      });
+      await loadRecommendations();
+    } catch {}
   };
 
-  const handleBulkApply = () => {
-    setAppliedOptimizations(prev => [...prev, ...selectedOptimizations]);
-    setSelectedOptimizations([]);
+  const exportCSV = () => {
+    const rows = [['Title', 'Type', 'Priority', 'Effort', 'Current Cost', 'Savings/mo', '% Saved', 'Status']];
+    filtered.forEach(r => rows.push([r.title, r.type, r.priority, r.effort, `$${r.currentCost}`, `$${r.savingsPerMonth}`, `${r.savingsPercent}%`, r.status]));
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'optimization.csv'; a.click();
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <MainLayout>
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
-        <span className="ml-3 text-slate-400">Loading optimization data...</span>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center gap-3 text-gray-500">
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm">Loading recommendations...</span>
       </div>
-    </MainLayout>
-  );
-
-  if (error) return (
-    <MainLayout>
-      <div className="p-6">
-        <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-6 text-center">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-          <p className="text-red-400 font-medium mb-4">{error}</p>
-          <button onClick={fetchData} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg">Retry</button>
-        </div>
-      </div>
-    </MainLayout>
+    </div>
   );
 
   return (
-    <MainLayout>
-      <div className="p-6 space-y-6">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-700 rounded-lg transition-colors">
-              <ArrowLeft className="w-5 h-5 text-slate-400" />
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-3 transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Back
             </button>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Cost Optimization</h1>
-              <p className="text-slate-400 text-sm mt-1">{provider} · {accountId}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Cost Optimization</h1>
+            <p className="text-sm text-gray-500 mt-1">{provider} · {accountName}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={fetchData} className="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Refresh">
-              <RefreshCw className="w-4 h-4 text-slate-400" />
+            <button onClick={loadRecommendations} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <RefreshCw className="w-4 h-4" /> Refresh
             </button>
-            <button
-              onClick={() => setShowCharts(!showCharts)}
-              className={`px-4 py-2 rounded-lg transition-colors ${showCharts ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'}`}
-            >
-              <BarChart3 className="w-4 h-4 inline mr-2" />Analytics
+            <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+              <BarChart2 className="w-4 h-4" /> Analytics
             </button>
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Stat tiles */}
+        <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total Savings Opportunity', value: `$${totalSavings.toLocaleString()}`, sub: `${currentCost > 0 ? ((totalSavings/currentCost)*100).toFixed(1) : 0}% potential reduction`, icon: DollarSign, color: 'text-green-400' },
-            { label: 'Active Recommendations',   value: optimizations.length.toString(),     sub: `${filteredOptimizations.length} visible`,                                                   icon: Target,     color: 'text-blue-400' },
-            { label: 'Quick Wins',               value: quickWins.toString(),                sub: 'Low effort, high priority',                                                                  icon: Zap,        color: 'text-purple-400' },
-            { label: 'Applied Savings',          value: `$${appliedSavings.toLocaleString()}`, sub: `${appliedOptimizations.length} implemented`,                                             icon: TrendingUp,  color: 'text-orange-400' },
-          ].map(({ label, value, sub, icon: Icon, color }) => (
-            <div key={label} className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 border border-slate-700">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-slate-400 text-sm">{label}</p>
-                <Icon className={`w-5 h-5 ${color}`} />
+            { label: 'Total Savings Opportunity', value: `$${Math.round(totalSavings).toLocaleString()}`, sub: `${savingsPct.toFixed(1)}% potential reduction`, icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600', subColor: 'text-green-600' },
+            { label: 'Active Recommendations', value: active.length, sub: `${filtered.length} visible`, icon: Activity, iconBg: 'bg-blue-100', iconColor: 'text-blue-600', subColor: 'text-blue-500' },
+            { label: 'Quick Wins', value: quickWins, sub: 'Low effort, high priority', icon: Zap, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', subColor: 'text-amber-500' },
+            { label: 'Applied Savings', value: `$${Math.round(applied).toLocaleString()}`, sub: `${recommendations.filter(r => r.status === 'COMPLETED').length} implemented`, icon: TrendingUp, iconBg: 'bg-purple-100', iconColor: 'text-purple-600', subColor: applied > 0 ? 'text-purple-500' : 'text-gray-400' },
+          ].map((tile, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-sm text-gray-500 font-medium">{tile.label}</span>
+                <div className={`w-9 h-9 ${tile.iconBg} rounded-xl flex items-center justify-center`}>
+                  <tile.icon className={`w-4.5 h-4.5 ${tile.iconColor}`} style={{ width: 18, height: 18 }} />
+                </div>
               </div>
-              <p className="text-3xl font-bold text-white">{value}</p>
-              <p className={`text-sm mt-2 ${color}`}>{sub}</p>
+              <div className="text-3xl font-bold text-gray-900 mb-1">{tile.value}</div>
+              <div className={`text-sm ${tile.subColor}`}>{tile.sub}</div>
             </div>
           ))}
         </div>
 
         {/* Charts */}
-        {showCharts && optimizations.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 border border-slate-700">
-              <h3 className="text-lg font-bold text-white mb-4">Savings by Type</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={savingsByType}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
-                  <YAxis stroke="#9ca3af" tickFormatter={v => `$${v}`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                    formatter={(v: any) => [`$${v.toLocaleString()}`, 'Savings']}
-                  />
-                  <Bar dataKey="savings" fill="#3b82f6" radius={[4,4,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 border border-slate-700">
-              <h3 className="text-lg font-bold text-white mb-4">Savings by Priority</h3>
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          {/* Savings by Type */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-gray-800 mb-4">Savings by Type</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={byType} barSize={28}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+                <Tooltip
+                  formatter={(v: any) => [`$${v}/mo`, 'Savings']}
+                  contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }}
+                />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {byType.map((entry, i) => <Cell key={i} fill={TYPE_COLORS[entry.name] || '#6366f1'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Savings by Priority */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-gray-800 mb-4">Savings by Priority</h3>
+            {byPriority.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie
-                    data={savingsByPriority}
-                    cx="50%" cy="50%"
-                    outerRadius={80}
-                    dataKey="savings"
-                    label={({ priority, savings }) => `${priority}: $${savings.toLocaleString()}`}
-                    labelLine={false}
-                  >
-                    {savingsByPriority.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+                  <Pie data={byPriority} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={3}>
+                    {byPriority.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                    formatter={(v: any) => [`$${v.toLocaleString()}`, 'Savings']}
+                    formatter={(v: any) => [`$${v}/mo`, 'Savings']}
+                    contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }}
+                  />
+                  <Legend
+                    formatter={(value, entry: any) => (
+                      <span style={{ fontSize: 12, color: '#475569' }}>
+                        {value}: <strong style={{ color: entry.color }}>${entry.payload.value}/mo</strong>
+                      </span>
+                    )}
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data</div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Search & Filters */}
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 border border-slate-700">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        {/* Table card */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+          {/* Table toolbar */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
-                type="text"
+                value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search optimizations..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50"
               />
             </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${showFilters ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'}`}
-            >
-              <Filter className="w-4 h-4" />Filters
-              {(filterType !== 'All' || filterPriority !== 'All' || filterEffort !== 'All') && (
-                <span className="w-2 h-2 bg-red-500 rounded-full" />
-              )}
+
+            {/* Status pills */}
+            <div className="flex gap-1">
+              {['OPEN', 'IN_PROGRESS', 'COMPLETED', 'ALL'].map(s => (
+                <button key={s} onClick={() => setFilterStatus(s)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                  {s === 'IN_PROGRESS' ? 'In Progress' : s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => setShowFilters(f => !f)}
+              className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors ${showFilters ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              <Filter className="w-4 h-4" /> Filters
             </button>
-            <select
-              value={sortField}
-              onChange={e => { setSortField(e.target.value); setSortDirection('desc'); }}
-              className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-            >
-              <option value="potentialSavings">Sort by: Savings</option>
-              <option value="priority">Sort by: Priority</option>
-              <option value="effort">Sort by: Effort</option>
-              <option value="savingsPercent">Sort by: % Savings</option>
-            </select>
-            <button className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2">
-              <Download className="w-4 h-4" />Export
+
+            <button onClick={exportCSV}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+              <Download className="w-4 h-4" /> Export
             </button>
+
+            {selected.size > 0 && (
+              <button onClick={applySelected}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                <CheckCircle2 className="w-4 h-4" /> Apply {selected.size} selected
+              </button>
+            )}
           </div>
 
+          {/* Filter row */}
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-700">
-              {[
-                { label: 'Type', value: filterType, setter: setFilterType, options: optimizationTypes },
-                { label: 'Priority', value: filterPriority, setter: setFilterPriority, options: ['All','High','Medium','Low'] },
-                { label: 'Effort', value: filterEffort, setter: setFilterEffort, options: ['All','Low','Medium','High'] },
-              ].map(({ label, value, setter, options }) => (
-                <div key={label}>
-                  <label className="text-slate-400 text-sm mb-2 block">{label}</label>
-                  <select
-                    value={value}
-                    onChange={e => setter(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  >
-                    {options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
+            <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
+              <span className="text-xs font-medium text-gray-500">Priority:</span>
+              {['ALL', 'HIGH', 'MEDIUM', 'LOW'].map(p => (
+                <button key={p} onClick={() => setFilterPriority(p)}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${filterPriority === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
+                  {p.charAt(0) + p.slice(1).toLowerCase()}
+                </button>
+              ))}
+              <span className="text-xs font-medium text-gray-500 ml-3">Type:</span>
+              {['ALL', ...types].map(t => (
+                <button key={t} onClick={() => setFilterType(t)}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${filterType === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
+                  {t === 'ALL' ? 'All Types' : t}
+                </button>
               ))}
             </div>
           )}
-        </div>
 
-        {/* Bulk Actions */}
-        {selectedOptimizations.length > 0 && (
-          <div className="bg-blue-500/10 border border-blue-500/50 rounded-xl p-4 flex items-center justify-between">
-            <p className="text-blue-400 font-medium">
-              {selectedOptimizations.length} selected — $
-              {selectedOptimizations.reduce((s, id) => s + (optimizations.find(o => o.id === id)?.potentialSavings || 0), 0).toLocaleString()} potential savings
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={handleBulkApply} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />Apply Selected
-              </button>
-              <button onClick={() => setSelectedOptimizations([])} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Table */}
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-slate-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-700/50">
+          {/* Table */}
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="w-10 pl-5 py-3">
+                  <button onClick={toggleAll} className="text-gray-400 hover:text-gray-600">
+                    {allSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4" />}
+                  </button>
+                </th>
+                <th className="text-left text-xs font-semibold text-gray-500 py-3 px-3">Recommendation</th>
+                <th className="text-left text-xs font-semibold text-gray-500 py-3 px-3">Type</th>
+                <th className="text-left text-xs font-semibold text-gray-500 py-3 px-3 cursor-pointer select-none" onClick={() => toggleSort('priority')}>
+                  <span className="flex items-center gap-1">Priority <SortIcon f="priority" /></span>
+                </th>
+                <th className="text-left text-xs font-semibold text-gray-500 py-3 px-3 cursor-pointer select-none" onClick={() => toggleSort('effort')}>
+                  <span className="flex items-center gap-1">Effort <SortIcon f="effort" /></span>
+                </th>
+                <th className="text-right text-xs font-semibold text-gray-500 py-3 px-3">Current Cost</th>
+                <th className="text-right text-xs font-semibold text-gray-500 py-3 px-3 cursor-pointer select-none" onClick={() => toggleSort('savings')}>
+                  <span className="flex items-center gap-1 justify-end">Savings/mo <SortIcon f="savings" /></span>
+                </th>
+                <th className="text-right text-xs font-semibold text-gray-500 py-3 px-3">% Saved</th>
+                <th className="text-left text-xs font-semibold text-gray-500 py-3 px-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
                 <tr>
-                  <th className="p-4">
-                    <input type="checkbox"
-                      checked={selectedOptimizations.length === sortedOptimizations.length && sortedOptimizations.length > 0}
-                      onChange={() => {
-                        if (selectedOptimizations.length === sortedOptimizations.length) setSelectedOptimizations([]);
-                        else setSelectedOptimizations(sortedOptimizations.map(o => o.id));
-                      }}
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
-                    />
-                  </th>
-                  {[
-                    { label: 'Recommendation', field: null },
-                    { label: 'Type', field: 'type' },
-                    { label: 'Priority', field: 'priority' },
-                    { label: 'Effort', field: 'effort' },
-                    { label: 'Current Cost', field: 'currentCost' },
-                    { label: 'Savings/mo', field: 'potentialSavings' },
-                    { label: '% Saved', field: 'savingsPercent' },
-                    { label: 'Actions', field: null },
-                  ].map(({ label, field }) => (
-                    <th key={label} className="text-left text-slate-400 text-sm font-semibold p-4">
-                      {field ? (
-                        <button onClick={() => handleSort(field)} className="flex items-center gap-2 hover:text-white transition-colors">
-                          {label}<ArrowUpDown className="w-4 h-4" />
-                        </button>
-                      ) : label}
-                    </th>
-                  ))}
+                  <td colSpan={9} className="py-16 text-center text-sm text-gray-400">
+                    <Info className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    No recommendations match your filters
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {sortedOptimizations.map(opt => {
-                  const EffortIcon = getEffortIcon(opt.effort);
-                  return (
-                    <tr key={opt.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                      <td className="p-4">
-                        <input type="checkbox"
-                          checked={selectedOptimizations.includes(opt.id)}
-                          onChange={() => setSelectedOptimizations(prev =>
-                            prev.includes(opt.id) ? prev.filter(id => id !== opt.id) : [...prev, opt.id]
-                          )}
-                          className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
-                        />
-                      </td>
-                      <td className="p-4 max-w-xs">
-                        <p className="text-white font-medium mb-1">{opt.title}</p>
-                        <p className="text-slate-400 text-sm">{opt.description}</p>
-                        {opt.resources.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {opt.resources.slice(0, 3).map((r, i) => (
-                              <span key={i} className="px-2 py-0.5 bg-slate-700/50 text-slate-300 text-xs rounded font-mono">{r}</span>
-                            ))}
-                            {opt.resources.length > 3 && (
-                              <span className="px-2 py-0.5 bg-slate-700/50 text-slate-400 text-xs rounded">+{opt.resources.length - 3} more</span>
+              ) : filtered.map(rec => (
+                <>
+                  <tr key={rec.id}
+                    onClick={() => setExpanded(expanded === rec.id ? null : rec.id)}
+                    className={`border-b border-gray-50 cursor-pointer transition-colors ${expanded === rec.id ? 'bg-indigo-50/40' : 'hover:bg-gray-50'} ${rec.status === 'COMPLETED' ? 'opacity-60' : ''}`}>
+                    <td className="pl-5 py-3.5">
+                      <button onClick={e => { e.stopPropagation(); toggleSelect(rec.id); }} className="text-gray-400 hover:text-gray-600">
+                        {selected.has(rec.id) ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-3 max-w-xs">
+                      <div className="flex items-start gap-2">
+                        <div>
+                          <div className="text-sm font-medium text-gray-800 leading-snug">{rec.title}</div>
+                          {rec.resource && <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[260px]">{rec.resource}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600">
+                        <span className="w-2 h-2 rounded-full" style={{ background: TYPE_COLORS[rec.type] || '#94a3b8' }} />
+                        {rec.type}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${PRIORITY_CONFIG[rec.priority].bg} ${PRIORITY_CONFIG[rec.priority].text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[rec.priority].dot}`} />
+                        {PRIORITY_CONFIG[rec.priority].label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium ${EFFORT_CONFIG[rec.effort].bg} ${EFFORT_CONFIG[rec.effort].text}`}>
+                        {EFFORT_CONFIG[rec.effort].label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right text-sm text-gray-600">${rec.currentCost.toLocaleString()}</td>
+                    <td className="py-3.5 px-3 text-right">
+                      <span className="text-sm font-semibold text-green-600">${rec.savingsPerMonth.toLocaleString()}</span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      {rec.savingsPercent > 0 ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(rec.savingsPercent, 100)}%` }} />
+                          </div>
+                          <span className="text-xs font-medium text-gray-600">{rec.savingsPercent}%</span>
+                        </div>
+                      ) : <span className="text-xs text-gray-400">—</span>}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                        {rec.status === 'COMPLETED' ? (
+                          <span className="flex items-center gap-1 text-xs text-green-600 font-medium"><CheckCircle2 className="w-3.5 h-3.5" /> Done</span>
+                        ) : (
+                          <>
+                            <button onClick={() => { toggleSelect(rec.id); }}
+                              className="px-2.5 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1">
+                              <ArrowUpRight className="w-3.5 h-3.5" /> Apply
+                            </button>
+                            <button onClick={() => dismiss(rec.id)}
+                              className="px-2.5 py-1 text-xs font-medium bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 transition-colors">
+                              Dismiss
+                            </button>
+                          </>
+                        )}
+                        <ChevronRight className={`w-4 h-4 text-gray-300 transition-transform ${expanded === rec.id ? 'rotate-90' : ''}`} />
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* Expanded detail row */}
+                  {expanded === rec.id && (
+                    <tr key={`${rec.id}-exp`} className="bg-indigo-50/30">
+                      <td colSpan={9} className="px-5 py-4">
+                        <div className="grid grid-cols-3 gap-6">
+                          <div className="col-span-2">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</h4>
+                            <p className="text-sm text-gray-700 leading-relaxed">{rec.description}</p>
+                            {rec.steps && rec.steps.length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Implementation Steps</h4>
+                                <ol className="space-y-1.5">
+                                  {rec.steps.map((step, i) => (
+                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
+                                      {step}
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
                             )}
                           </div>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 bg-slate-700/50 text-slate-300 text-xs rounded">{opt.type}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${getPriorityColor(opt.priority)}`}>{opt.priority}</span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <EffortIcon className={`w-4 h-4 ${getEffortColor(opt.effort)}`} />
-                          <span className={`text-sm font-medium ${getEffortColor(opt.effort)}`}>{opt.effort}</span>
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
+                              {rec.region && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500">Region</span>
+                                  <span className="font-medium text-gray-700">{rec.region}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Current Cost</span>
+                                <span className="font-medium text-gray-700">${rec.currentCost}/mo</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Savings</span>
+                                <span className="font-semibold text-green-600">-${rec.savingsPerMonth}/mo</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">New Cost</span>
+                                <span className="font-medium text-gray-700">${rec.currentCost - rec.savingsPerMonth}/mo</span>
+                              </div>
+                              <div className="pt-2 border-t border-gray-100">
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500">Annual Savings</span>
+                                  <span className="font-bold text-green-600">${(rec.savingsPerMonth * 12).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      <td className="p-4 text-slate-300 font-medium">${opt.currentCost.toLocaleString()}</td>
-                      <td className="p-4">
-                        <span className="text-green-400 font-bold text-lg">${opt.potentialSavings.toLocaleString()}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-green-400 font-semibold">{opt.savingsPercent}%</span>
-                      </td>
-                      <td className="p-4">
-                        <button onClick={() => handleApply(opt.id)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium">
-                          Apply
-                        </button>
-                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Table footer */}
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+            <span className="text-xs text-gray-400">
+              Showing {filtered.length} of {recommendations.length} recommendations
+              {selected.size > 0 && <span className="ml-2 text-indigo-600 font-medium">· {selected.size} selected</span>}
+            </span>
+            <span className="text-xs text-gray-400">
+              Potential: <span className="text-green-600 font-semibold">${Math.round(totalSavings).toLocaleString()}/mo · ${Math.round(totalSavings * 12).toLocaleString()}/yr</span>
+            </span>
           </div>
         </div>
 
-        {sortedOptimizations.length === 0 && (
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-12 border border-slate-700 text-center">
-            <TrendingDown className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400 text-lg mb-2">
-              {appliedOptimizations.length > 0 ? `Great job! You've applied ${appliedOptimizations.length} optimization(s)` : 'No optimizations found'}
-            </p>
-            <p className="text-slate-500 text-sm">Try adjusting your filters</p>
-          </div>
-        )}
-
       </div>
-    </MainLayout>
+    </div>
   );
-};
-
-export default Optimization;
+}

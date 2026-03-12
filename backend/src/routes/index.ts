@@ -17,6 +17,8 @@ import migrationRoutes    from './migration.routes';
 import servicenowRoutes   from './servicenow.routes';
 import billingRoutes      from './billing.routes';
 import automationRoutes   from './automation.routes';
+import chatRoutes from './chat.routes';
+import reportsRoutes from './reports.routes';
 
 const router = Router();
 
@@ -37,5 +39,7 @@ router.use('/migration',      migrationRoutes);   // /api/migration/recommendati
 router.use('/servicenow',     servicenowRoutes);  // /api/servicenow/...
 router.use('/billing',        billingRoutes);     // /api/billing/...
 router.use('/automation',     automationRoutes);  // /api/automation/execute
+router.use('/chat',           chatRoutes);       // /api/chat/message
+router.use('/reports',        reportsRoutes);
 
 export default router;

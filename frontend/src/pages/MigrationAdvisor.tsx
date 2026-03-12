@@ -1,10 +1,11 @@
 // src/pages/MigrationAdvisor.tsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import {
   ArrowRight, RefreshCw, DollarSign, Zap, Server,
   TrendingDown, CheckCircle, ChevronRight,
-  Cloud, BarChart3, Lightbulb, ArrowLeftRight, ArrowUpRight,
+  Cloud, BarChart3, Lightbulb, ArrowLeftRight, ArrowUpRight, ArrowLeft,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -305,6 +306,7 @@ const PROVIDERS = (['aws','azure','gcp'] as Provider[]);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function MigrationAdvisor() {
+  const navigate = useNavigate();
   const token = localStorage.getItem('accessToken');
   const hdrs  = { Authorization: `Bearer ${token}` };
 
@@ -383,6 +385,9 @@ export default function MigrationAdvisor() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-2 transition-colors">
+            <ArrowLeft size={12} /> Back
+          </button>
           <h1 className="text-2xl font-bold text-gray-900">Migration Advisor</h1>
           <p className="text-sm text-gray-400 mt-0.5">
             Aggregated optimization recommendations across all {allAccounts.length} connected accounts

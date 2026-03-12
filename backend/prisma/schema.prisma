@@ -24,19 +24,19 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // Relations
-  cloudAccounts           CloudAccount[]
-  nukeRetentions          NukeRetention[]
-  nukeRuns                NukeRun[]
-  notifications           Notification[]
-  auditLogs               AuditLog[]
-  sessions                Session[]
-  verificationTokens      VerificationToken[]
-  mfaBackupCodes          MfaBackupCode[]
-  billingSchedules        BillingSchedule[]
-  automationLogs          AutomationLog[]
+  cloudAccounts            CloudAccount[]
+  nukeRetentions           NukeRetention[]
+  nukeRuns                 NukeRun[]
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  sessions                 Session[]
+  verificationTokens       VerificationToken[]
+  mfaBackupCodes           MfaBackupCode[]
+  billingSchedules         BillingSchedule[]
+  automationLogs           AutomationLog[]
   migrationRecommendations MigrationRecommendation[]
-  serviceNowConfigs       ServiceNowConfig[]
+  serviceNowConfigs        ServiceNowConfig[]
+  alerts                   Alert[]
 
   @@map("users")
 }
@@ -48,7 +48,7 @@ enum Role {
 }
 
 // ============================================
-// AUTH — SESSION, VERIFICATION, MFA BACKUP
+// AUTH
 // ============================================
 
 model Session {
@@ -62,7 +62,6 @@ model Session {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Relations
   user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -71,15 +70,14 @@ model Session {
 }
 
 model VerificationToken {
-  id        String            @id @default(cuid())
+  id        String                @id @default(cuid())
   userId    String
-  token     String            @unique
+  token     String                @unique
   type      VerificationTokenType
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime          @default(now())
+  createdAt DateTime              @default(now())
 
-  // Relations
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
@@ -94,13 +92,12 @@ enum VerificationTokenType {
 }
 
 model MfaBackupCode {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  code      String   // Stored as bcrypt hash
+  code      String
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  // Relations
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -112,19 +109,18 @@ model MfaBackupCode {
 // ============================================
 
 model CloudAccount {
-  id           String        @id @default(cuid())
-  userId       String
-  provider     CloudProvider
-  accountName  String
-  accountId    String        // AWS Account ID / Azure Subscription ID / GCP Project ID
-  region       String?       // Primary region
-  credentials  String?       @db.Text  // Encrypted JSON
-  status       AccountStatus @default(ACTIVE)
-  lastSyncAt   DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String        @id @default(cuid())
+  userId      String
+  provider    CloudProvider
+  accountName String
+  accountId   String
+  region      String?
+  credentials String?       @db.Text
+  status      AccountStatus @default(ACTIVE)
+  lastSyncAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  // Relations
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   resources        Resource[]
   costData         CostData[]
@@ -134,6 +130,7 @@ model CloudAccount {
   costAnomalies    CostAnomaly[]
   incidents        Incident[]
   changeEvents     ChangeEvent[]
+  alerts           Alert[]
 
   @@unique([userId, provider, accountId])
   @@map("cloud_accounts")
@@ -158,21 +155,19 @@ enum AccountStatus {
 model Resource {
   id           String   @id @default(cuid())
   accountId    String
-  resourceId   String   // Cloud provider resource ID
-  resourceType String   // EC2, RDS, S3, VM, StorageAccount, etc.
+  resourceId   String
+  resourceType String
   resourceName String
   region       String
-  metadata     String   @db.Text // JSON with all resource details
+  metadata     String   @db.Text
   status       String
-  tags         String?  @db.Text // JSON
+  tags         String?  @db.Text
   costPerMonth Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Relations
-  account        CloudAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  metrics        ResourceMetric[]
-  nukeRetentions NukeRetention[]
+  account      CloudAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  metrics      ResourceMetric[]
 
   @@unique([accountId, resourceId])
   @@index([accountId, resourceType])
@@ -180,20 +175,15 @@ model Resource {
   @@map("resources")
 }
 
-// ============================================
-// RESOURCE METRICS
-// ============================================
-
 model ResourceMetric {
   id          String   @id @default(cuid())
   resourceId  String
-  metricName  String   // CPUUtilization, NetworkIn, DiskReadOps, etc.
+  metricName  String
   metricValue Float
   unit        String
   timestamp   DateTime
   createdAt   DateTime @default(now())
 
-  // Relations
   resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
   @@index([resourceId, metricName, timestamp])
@@ -216,7 +206,6 @@ model CostData {
   region    String?
   createdAt DateTime @default(now())
 
-  // Relations
   account   CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, date, service, region])
@@ -231,7 +220,7 @@ model CostData {
 model SecurityFinding {
   id               String        @id @default(cuid())
   accountId        String
-  findingId        String        // Provider-specific finding ID
+  findingId        String
   severity         Severity
   title            String
   description      String        @db.Text
@@ -245,7 +234,6 @@ model SecurityFinding {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  // Relations
   account          CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, findingId])
@@ -273,19 +261,19 @@ enum FindingStatus {
 // ============================================
 
 model Recommendation {
-  id                  String               @id @default(cuid())
+  id                  String                 @id @default(cuid())
   accountId           String?
   resourceId          String?
   category            RecommendationCategory
   title               String
-  description         String               @db.Text
+  description         String                 @db.Text
   impact              Impact
-  savings             Float?               // Monthly savings in USD
+  savings             Float?
   effort              Effort
-  status              RecommendationStatus @default(OPEN)
-  implementationSteps String?              @db.Text
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  status              RecommendationStatus   @default(OPEN)
+  implementationSteps String?                @db.Text
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
 
   @@index([accountId, status, impact])
   @@map("recommendations")
@@ -323,19 +311,21 @@ enum RecommendationStatus {
 // ============================================
 
 model NukeConfig {
-  id               String   @id @default(cuid())
-  accountId        String   @unique
-  mode             NukeMode @default(MANUAL)
-  enabled          Boolean  @default(false)
-  schedule         String?  // Cron expression or date
-  nextRunAt        DateTime?
-  notificationDays Int      @default(5)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  accountId          String    @unique
+  mode               NukeMode  @default(AUTOMATIC)
+  enabled            Boolean   @default(true)
+  scheduleLabel      String?
+  nextRunAt          DateTime?
+  notificationDays   Int       @default(7)
+  notificationEmails String    @default("[]") @db.Text
+  nukeCode           String?   @db.Text
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  // Relations
-  account          CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  nukeRuns         NukeRun[]
+  account            CloudAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  nukeRuns           NukeRun[]
+  nukeNotifications  NukeNotification[]
 
   @@map("nuke_configs")
 }
@@ -346,31 +336,27 @@ enum NukeMode {
 }
 
 model NukeRetention {
-  id             String          @id @default(cuid())
-  accountId      String
-  userId         String
-  resourceId     String
-  resourceType   String
-  resourceName   String
-  resourceRegion String?
-  retentionType  RetentionType
-  expiresAt      DateTime?
-  retainDays     Int?
-  reason         String          @db.Text
-  isApproved     Boolean         @default(false)
-  approvedBy     String?
-  approvedAt     DateTime?
-  status         RetentionStatus @default(PENDING)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  accountId       String
+  userId          String
+  cloudResourceId String
+  resourceType    String
+  resourceName    String
+  resourceRegion  String?
+  resourceMeta    String?         @db.Text
+  retentionType   RetentionType
+  expiresAt       DateTime?
+  retainDays      Int?
+  reason          String          @db.Text
+  status          RetentionStatus @default(ACTIVE)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  // Relations
-  account        CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resource       Resource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  account         CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([accountId, status])
-  @@index([resourceId])
+  @@index([cloudResourceId])
   @@map("nuke_retentions")
 }
 
@@ -381,32 +367,34 @@ enum RetentionType {
 }
 
 enum RetentionStatus {
-  PENDING
   ACTIVE
   EXPIRED
-  REJECTED
+  REMOVED
 }
 
 model NukeRun {
-  id               String    @id @default(cuid())
-  configId         String
-  userId           String
-  runType          RunType
-  status           RunStatus @default(PENDING)
-  totalResources   Int       @default(0)
-  deletedResources Int       @default(0)
-  retainedResources Int      @default(0)
-  failedResources  Int       @default(0)
-  errorMessage     String?   @db.Text
-  executionLog     String?   @db.Text
-  startedAt        DateTime?
-  completedAt      DateTime?
-  duration         Int?      // Duration in seconds
-  createdAt        DateTime  @default(now())
+  id                String    @id @default(cuid())
+  configId          String
+  userId            String
+  runType           RunType
+  status            RunStatus @default(PENDING)
+  totalResources    Int       @default(0)
+  deletedResources  Int       @default(0)
+  retainedResources Int       @default(0)
+  failedResources   Int       @default(0)
+  skippedResources  Int       @default(0)
+  wouldDelete       Int       @default(0)
+  dryRunReport      String?   @db.Text
+  skippedDetails    String?   @db.Text
+  errorMessage      String?   @db.Text
+  triggeredBy       String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  duration          String?
+  createdAt         DateTime  @default(now())
 
-  // Relations
-  config           NukeConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config            NukeConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([configId, createdAt])
   @@map("nuke_runs")
@@ -426,6 +414,21 @@ enum RunStatus {
   CANCELLED
 }
 
+model NukeNotification {
+  id              String     @id @default(cuid())
+  configId        String
+  recipientEmails String     @db.Text
+  subject         String
+  daysUntilNuke   Int
+  status          String     @default("sent")
+  sentAt          DateTime   @default(now())
+
+  config          NukeConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([configId])
+  @@map("nuke_notifications")
+}
+
 // ============================================
 // NOTIFICATIONS
 // ============================================
@@ -439,10 +442,9 @@ model Notification {
   priority  Priority         @default(NORMAL)
   isRead    Boolean          @default(false)
   actionUrl String?
-  metadata  String?          @db.Text // JSON
+  metadata  String?          @db.Text
   createdAt DateTime         @default(now())
 
-  // Relations
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
@@ -478,14 +480,13 @@ model AuditLog {
   action       String
   entityType   String
   entityId     String?
-  changes      String?  @db.Text // JSON with before/after
+  changes      String?  @db.Text
   ipAddress    String?
   userAgent    String?
-  status       String   // success, failure
+  status       String
   errorMessage String?  @db.Text
   createdAt    DateTime @default(now())
 
-  // Relations
   user         User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
@@ -507,33 +508,32 @@ model MigrationAnalysis {
   savingsPercent  Float
   complexity      String
   timeline        String
-  recommendations String        @db.Text // JSON
+  recommendations String        @db.Text
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@map("migration_analyses")
 }
 
-// Persists accept/dismiss state from MigrationAdvisor.tsx
-// Previously stored in-memory only — survives server restarts now
 model MigrationRecommendation {
-  id          String                     @id @default(cuid())
-  userId      String
-  resourceId  String                     // Cloud resource ID
-  provider    CloudProvider
-  title       String
-  description String                     @db.Text
-  targetCloud CloudProvider
-  savings     Float
-  complexity  String
-  status      MigrationRecommendationStatus @default(PENDING)
-  dismissedAt DateTime?
-  acceptedAt  DateTime?
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  id             String                        @id @default(cuid())
+  userId         String
+  cloudAccountId String?
+  resourceId     String?
+  provider       CloudProvider?
+  title          String
+  description    String                        @db.Text
+  targetCloud    CloudProvider?
+  savings        Float?
+  complexity     String?
+  status         MigrationRecommendationStatus @default(PENDING)
+  metadata       String?                       @db.Text
+  dismissedAt    DateTime?
+  acceptedAt     DateTime?
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
 
-  // Relations
-  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@map("migration_recommendations")
@@ -546,7 +546,7 @@ enum MigrationRecommendationStatus {
 }
 
 // ============================================
-// BUDGETS & ALERTS
+// BUDGETS
 // ============================================
 
 model Budget {
@@ -576,25 +576,23 @@ enum BudgetPeriod {
 
 // ============================================
 // BILLING SCHEDULES
-// Previously in-memory in billing.service.ts — now persisted
 // ============================================
 
 model BillingSchedule {
-  id          String               @id @default(cuid())
-  userId      String
-  name        String
-  frequency   BillingFrequency
-  format      BillingExportFormat
-  recipients  String               @db.Text // JSON array of email strings
-  sections    String               @db.Text // JSON array: ['summary','services','trends']
-  active      Boolean              @default(true)
-  lastSentAt  DateTime?
-  nextSendAt  DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id         String              @id @default(cuid())
+  userId     String
+  name       String
+  frequency  BillingFrequency
+  format     BillingExportFormat
+  recipients String              @db.Text
+  sections   String              @db.Text
+  active     Boolean             @default(true)
+  lastSentAt DateTime?
+  nextSendAt DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
 
-  // Relations
-  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([active, nextSendAt])
@@ -614,32 +612,30 @@ enum BillingExportFormat {
 
 // ============================================
 // AUTOMATION LOGS
-// Previously in-memory in automation.service.ts — now persisted
 // ============================================
 
 model AutomationLog {
-  id           String              @id @default(cuid())
+  id           String           @id @default(cuid())
   userId       String
   accountId    String?
-  provider     CloudProvider
-  actionType   String              // stop_instance, snapshot_instance, etc.
-  resourceId   String              // Target resource
-  resourceType String
+  provider     CloudProvider?
+  action       String
+  resourceType String?
+  resourceId   String?
   region       String?
-  dryRun       Boolean             @default(false)
+  dryRun       Boolean          @default(false)
   status       AutomationStatus
-  output       String?             @db.Text // Full execution output JSON
-  errorMessage String?             @db.Text
-  startedAt    DateTime
+  result       String?          @db.Text
+  errorMessage String?          @db.Text
+  startedAt    DateTime?
   completedAt  DateTime?
-  duration     Int?                // milliseconds
-  createdAt    DateTime            @default(now())
+  duration     Int?
+  createdAt    DateTime         @default(now())
 
-  // Relations
   user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
-  @@index([accountId, actionType])
+  @@index([accountId, action])
   @@map("automation_logs")
 }
 
@@ -652,29 +648,27 @@ enum AutomationStatus {
 
 // ============================================
 // ANALYTICS — COST ANOMALIES
-// Powers FinOpsAnomalyFeed.tsx persistence
 // ============================================
 
 model CostAnomaly {
-  id          String           @id @default(cuid())
-  accountId   String
-  service     String
-  anomalyType AnomalyType
-  severity    AnomalySeverity
-  title       String
-  description String           @db.Text
+  id           String          @id @default(cuid())
+  accountId    String
+  service      String
+  anomalyType  AnomalyType
+  severity     AnomalySeverity
+  title        String
+  description  String          @db.Text
   expectedCost Float
-  actualCost  Float
-  variance    Float            // percentage
-  detectedAt  DateTime
-  resolvedAt  DateTime?
-  status      AnomalyStatus    @default(OPEN)
-  metadata    String?          @db.Text // JSON
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  actualCost   Float
+  variance     Float
+  detectedAt   DateTime
+  resolvedAt   DateTime?
+  status       AnomalyStatus   @default(OPEN)
+  metadata     String?         @db.Text
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
-  // Relations
-  account     CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account      CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, status, detectedAt])
   @@index([severity, status])
@@ -714,17 +708,16 @@ model Incident {
   description String         @db.Text
   severity    Severity
   status      IncidentStatus @default(OPEN)
-  source      String         // security, cost, performance
+  source      String
   resourceId  String?
   region      String?
   detectedAt  DateTime
   resolvedAt  DateTime?
   resolvedBy  String?
-  metadata    String?        @db.Text // JSON
+  metadata    String?        @db.Text
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  // Relations
   account     CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, status, severity])
@@ -753,12 +746,11 @@ model ChangeEvent {
   resourceId   String?
   resourceType String?
   region       String?
-  initiatedBy  String?         // user email or 'system'
-  metadata     String?         @db.Text // JSON (before/after state)
+  initiatedBy  String?
+  metadata     String?         @db.Text
   occurredAt   DateTime
   createdAt    DateTime        @default(now())
 
-  // Relations
   account      CloudAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, occurredAt])
@@ -781,32 +773,30 @@ enum ChangeEventType {
 // SERVICENOW INTEGRATION
 // ============================================
 
-// Per-user ServiceNow instance configuration (credentials stored encrypted)
 model ServiceNowConfig {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  instanceUrl  String
-  credentials  String   @db.Text // Encrypted JSON {username, password} or {clientId, clientSecret}
-  syncEnabled  Boolean  @default(true)
-  lastSyncAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String             @id @default(cuid())
+  userId      String             @unique
+  instanceUrl String
+  credentials String             @db.Text
+  syncEnabled Boolean            @default(true)
+  lastSyncAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
-  // Relations
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tickets      ServiceNowTicket[]
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tickets     ServiceNowTicket[]
 
   @@map("servicenow_configs")
 }
 
 model ServiceNowTicket {
-  id           String            @id @default(cuid())
+  id           String               @id @default(cuid())
   configId     String
-  ticketNumber String            // e.g. INC0001234
-  sysId        String?           // ServiceNow sys_id
+  ticketNumber String
+  sysId        String?
   type         ServiceNowTicketType
   title        String
-  description  String            @db.Text
+  description  String               @db.Text
   severity     ServiceNowSeverity
   status       ServiceNowStatus
   assignee     String?
@@ -816,10 +806,9 @@ model ServiceNowTicket {
   category     String?
   externalUrl  String?
   resolvedAt   DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
-  // Relations
   config       ServiceNowConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@unique([configId, ticketNumber])
@@ -866,4 +855,68 @@ model Tag {
   @@unique([accountId, key, value])
   @@index([accountId])
   @@map("tags")
+}
+
+// ============================================
+// ALERT CENTER
+// ============================================
+
+enum AlertSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum AlertType {
+  COST_SPIKE
+  BUDGET_THRESHOLD
+  SECURITY_VIOLATION
+  RESOURCE_ANOMALY
+  ACCOUNT_HEALTH
+  IDLE_RESOURCE
+  CREDENTIAL_EXPIRY
+  POLICY_CHANGE
+}
+
+model Alert {
+  id             String        @id @default(cuid())
+  userId         String
+  cloudAccountId String?
+  provider       String?
+  type           AlertType
+  severity       AlertSeverity
+  status         AlertStatus   @default(OPEN)
+  title          String
+  message        String        @db.Text
+  resourceId     String?
+  resourceName   String?
+  resourceType   String?
+  metricValue    Float?
+  thresholdValue Float?
+  changePercent  Float?
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  resolvedAt     DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cloudAccount CloudAccount? @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([cloudAccountId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+  @@map("alerts")
 }

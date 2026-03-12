@@ -7,6 +7,8 @@ import OpenAI from 'openai';
 import reportsRouter from './routes/reports.routes';
 import gcpRouter from './routes/gcp.routes';
 import apiRouter from './routes/index';
+import cron from 'node-cron';
+import { checkNukeSchedules } from './services/nuke.service';
 
 dotenv.config();
 
@@ -480,7 +482,6 @@ async function fetchAWSCosts(creds: { accessKeyId: string; secretAccessKey: stri
 
   console.log(`📅 AWS CE: ${dates.currentMonthStart} → ${dates.currentMonthEnd} | last: ${dates.lastMonthStart} → ${dates.lastMonthEnd}`);
 
-  // Use MONTHLY granularity with GroupBy — matches server.ts fix for accurate totals
   const [currentMonthData, lastMonthData] = await Promise.all([
     ce.send(new GetCostAndUsageCommand({ TimePeriod: { Start: dates.currentMonthStart, End: dates.currentMonthEnd }, Granularity: 'MONTHLY', Metrics: ['UnblendedCost'], GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }] })),
     ce.send(new GetCostAndUsageCommand({ TimePeriod: { Start: dates.lastMonthStart, End: dates.lastMonthEnd }, Granularity: 'MONTHLY', Metrics: ['UnblendedCost'], GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }] })),
@@ -1045,7 +1046,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 // ============================================
-// BOOT — single app.listen, no race condition
+// BOOT
 // ============================================
 async function start() {
   await initDB();
@@ -1060,7 +1061,20 @@ async function start() {
     console.log(`📦 Accounts loaded: ${connectedAccounts.length}`);
     console.log(`🤖 ChatBot: ${process.env.OPENAI_API_KEY ? '✅ OpenAI ready' : '⚠️  OPENAI_API_KEY not set'}`);
     console.log('='.repeat(60));
+
+    // ── Nuke Scheduler ───────────────────────────────────────────────────────
+    // Runs every hour to check for due scheduled nukes and send notification emails.
+    // If a NukeConfig has nextRunAt <= now and mode = AUTOMATIC, it will:
+    //   • Send notification emails to configured recipients
+    //   • Execute the live nuke and record results in NukeRun table
+    //   • Clear nextRunAt so it doesn't re-trigger until manually rescheduled
+    cron.schedule('0 * * * *', async () => {
+      console.log('[cron] Running nuke schedule check...');
+      await checkNukeSchedules();
+    });
+    console.log('[cron] Nuke scheduler registered — runs every hour');
   });
+
   server.on('error', (error: any) => {
     if (error.code === 'EADDRINUSE') { console.error(`❌ Port ${PORT} already in use — kill the other process first`); process.exit(1); }
   });
