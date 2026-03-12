@@ -8,7 +8,7 @@ import {
   ChevronRight, ChevronDown, Cloud, Zap,
   Bot, Radiation, AlertCircle, Leaf, Ghost, Users,
   Sparkles, Bell, FileText, Map, BarChart2,
-  PieChart, ArrowRightLeft,
+  PieChart, ArrowRightLeft, BellRing,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,18 +38,19 @@ const INTELLIGENCE_TABS = (accountId: string) => [
 
 // ── Home-level nav (no account selected) ──────────────────────────────────────
 const HOME_MAIN = [
-  { icon: LayoutDashboard, label: 'Dashboard',        path: '/dashboard'         },
-  { icon: Bell,            label: 'Notifications',    path: '/notifications'     },
+  { icon: LayoutDashboard, label: 'Dashboard',     path: '/dashboard'  },
+  { icon: BellRing,        label: 'Alert Center',  path: '/alerts',     badge: 'NEW', badgeColor: '#ef4444' },
+  { icon: Bell,            label: 'Notifications', path: '/notifications' },
 ];
 
 const HOME_ANALYTICS = [
-  { icon: PieChart,        label: 'Advanced Analytics', path: '/analytics'          },
-  { icon: FileText,        label: 'Reports',            path: '/reports'            },
+  { icon: PieChart,        label: 'Advanced Analytics', path: '/analytics' },
+  { icon: FileText,        label: 'Reports',            path: '/reports'   },
 ];
 
 const HOME_TOOLS = [
-  { icon: ArrowRightLeft,  label: 'Migration Advisor', path: '/migration-advisor',  badge: 'NEW', badgeColor: '#6366f1' },
-  { icon: Radiation,       label: 'Automation',        path: '/automation',         badge: 'NEW', badgeColor: '#f97316' },
+  { icon: ArrowRightLeft,  label: 'Migration Advisor', path: '/migration-advisor', badge: 'NEW', badgeColor: '#6366f1' },
+  { icon: Radiation,       label: 'Automation',        path: '/automation',        badge: 'NEW', badgeColor: '#f97316' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
@@ -239,7 +240,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
           <>
             <SectionLabel label="Overview" />
             {HOME_MAIN.map(tab => (
-              <NavItem key={tab.path} icon={tab.icon} label={tab.label} path={tab.path} />
+              <NavItem key={tab.path} icon={tab.icon} label={tab.label} path={tab.path} badge={(tab as any).badge} badgeColor={(tab as any).badgeColor} />
             ))}
 
             <SectionLabel label="Analytics" />
