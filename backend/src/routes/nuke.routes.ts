@@ -27,7 +27,7 @@ router.get('/account/:accountId', authenticateToken, async (req: Request, res: R
   try {
     const { accountId } = req.params;
     const account = await prisma.cloudAccount.findFirst({
-      where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId },
+      where: { id: accountId },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
@@ -60,7 +60,7 @@ router.get('/resources/:accountId', authenticateToken, async (req: Request, res:
   try {
     const { accountId } = req.params;
     const account = await prisma.cloudAccount.findFirst({
-      where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId },
+      where: { id: accountId },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
@@ -99,7 +99,7 @@ router.get('/services/:provider', authenticateToken, async (req: Request, res: R
 router.get('/retentions/account/:accountId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { accountId } = req.params;
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const retentions = await prisma.nukeRetention.findMany({
@@ -140,7 +140,7 @@ router.post('/retention', authenticateToken, async (req: Request, res: Response)
       return res.status(400).json({ error: 'accountId, cloudResourceId, resourceName and reason are required' });
     }
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const existing = await prisma.nukeRetention.findFirst({ where: { accountId, cloudResourceId, status: 'ACTIVE' } });
@@ -198,7 +198,7 @@ router.get('/code/:accountId', authenticateToken, async (req: Request, res: Resp
     const { accountId } = req.params;
     const { refresh } = req.query;
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const config = await prisma.nukeConfig.findUnique({ where: { accountId } });
@@ -229,7 +229,7 @@ router.post('/dry-run/:accountId', authenticateToken, async (req: Request, res: 
     const { accountId } = req.params;
     const user = (req as any).user;
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: user.id } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     let config = await prisma.nukeConfig.findUnique({ where: { accountId } });
@@ -273,7 +273,7 @@ router.post('/execute', authenticateToken, async (req: Request, res: Response) =
     const { accountId, dryRun = true } = req.body;
     if (!accountId) return res.status(400).json({ error: 'accountId is required' });
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: user.id } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     let config = await prisma.nukeConfig.findUnique({ where: { accountId } });
@@ -338,7 +338,7 @@ router.get('/history/:accountId', authenticateToken, async (req: Request, res: R
     const { accountId } = req.params;
     const { limit = '20' } = req.query;
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const config = await prisma.nukeConfig.findUnique({ where: { accountId } });
@@ -380,7 +380,7 @@ router.get('/history/:accountId', authenticateToken, async (req: Request, res: R
 router.get('/history/:accountId/run/:runId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { accountId, runId } = req.params;
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const config = await prisma.nukeConfig.findUnique({ where: { accountId } });
@@ -408,7 +408,7 @@ router.put('/account/:accountId/settings', authenticateToken, async (req: Reques
     const { accountId } = req.params;
     const { mode, enabled, scheduleLabel, nextRunAt, notificationDays, notificationEmails } = req.body;
 
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const config = await prisma.nukeConfig.upsert({
@@ -441,7 +441,7 @@ router.put('/account/:accountId/settings', authenticateToken, async (req: Reques
 // Backward-compat alias
 router.put('/account/:accountId/mode', authenticateToken, async (req: Request, res: Response) => {
   const { accountId } = req.params;
-  const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+  const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
   if (!account) return res.status(404).json({ error: 'Account not found' });
   const config = await prisma.nukeConfig.upsert({
     where: { accountId },
@@ -456,7 +456,7 @@ router.put('/account/:accountId/mode', authenticateToken, async (req: Request, r
 router.post('/scan/:accountId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { accountId } = req.params;
-    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId, userId: (req as any).user?.id || (req as any).user?.userId } });
+    const account = await prisma.cloudAccount.findFirst({ where: { id: accountId } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const provider = account.provider.toLowerCase();

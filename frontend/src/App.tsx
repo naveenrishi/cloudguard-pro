@@ -7,8 +7,6 @@ import VerifyEmail             from './pages/VerifyEmail';
 import SetupMFA                from './pages/SetupMFA';
 import VerifyMFA               from './pages/VerifyMFA';
 import ConnectAWS              from './pages/ConnectAWS';
-import ConnectAzure            from './pages/ConnectAzure';
-import ConnectGCP              from './pages/ConnectGCP';
 import Settings                from './pages/Settings';
 import Recommendations         from './pages/Recommendations';
 import AccountNuke             from './pages/AccountNuke';
@@ -29,7 +27,7 @@ import AccountMigrationAdvisor from './pages/AccountMigrationAdvisor';
 import ChatBot                 from './components/ChatBot';
 import Overview                from './pages/Overview';
 import SubUsers                from './pages/SubUsers';
-import Onboarding              from './pages/Onboarding';
+import CloudOnboarding              from './pages/CloudOnboarding';
 import NotificationsPage       from './pages/Notifications';
 import BillingPage             from './pages/Billing';
 import Automation              from './pages/Automation';
@@ -74,7 +72,7 @@ function App() {
           <Route path="/verify-mfa"   element={<VerifyMFA />}   />
 
           {/* ── ONBOARDING ─────────────────────────────────────────────────── */}
-          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/onboarding" element={<CloudOnboarding />} />
 
           {/* ── MAIN DASHBOARD ─────────────────────────────────────────────── */}
           <Route path="/dashboard" element={<RequireOnboarding><NewDashboard /></RequireOnboarding>} />
@@ -128,11 +126,11 @@ function App() {
           <Route path="/databases"          element={<RequireOnboarding><Databases /></RequireOnboarding>}         />
           <Route path="/servicenow-tickets" element={<RequireOnboarding><ServiceNowTickets /></RequireOnboarding>} />
 
-          {/* ── CLOUD CONNECT ──────────────────────────────────────────────── */}
-          <Route path="/connect-aws"   element={<ConnectAWS />}   />
-          <Route path="/connect-azure" element={<ConnectAzure />} />
-          <Route path="/connect-gcp"   element={<ConnectGCP />}   />
-          <Route path="/connect-cloud" element={<ConnectAWS />}   />
+          <Route path="/connect"       element={<CloudOnboarding />} />
+          <Route path="/connect-aws"   element={<CloudOnboarding />} />
+          <Route path="/connect-azure" element={<CloudOnboarding />} />
+          <Route path="/connect-gcp"   element={<CloudOnboarding />} />
+          <Route path="/connect-cloud" element={<CloudOnboarding />} />
 
           {/* ── REDIRECTS ──────────────────────────────────────────────────── */}
           <Route path="/"  element={<Navigate to="/login" replace />} />

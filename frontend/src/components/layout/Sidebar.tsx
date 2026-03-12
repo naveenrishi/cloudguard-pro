@@ -8,7 +8,7 @@ import {
   ChevronRight, ChevronDown, Cloud, Zap,
   Bot, Radiation, AlertCircle, Leaf, Ghost, Users,
   Sparkles, Bell, FileText, Map, BarChart2,
-  PieChart, ArrowRightLeft, BellRing,
+  PieChart, ArrowRightLeft, BellRing, PlusCircle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,9 +38,9 @@ const INTELLIGENCE_TABS = (accountId: string) => [
 
 // ── Home-level nav (no account selected) ──────────────────────────────────────
 const HOME_MAIN = [
-  { icon: LayoutDashboard, label: 'Dashboard',     path: '/dashboard'  },
-  { icon: BellRing,        label: 'Alert Center',  path: '/alerts',     badge: 'NEW', badgeColor: '#ef4444' },
-  { icon: Bell,            label: 'Notifications', path: '/notifications' },
+  { icon: LayoutDashboard, label: 'Dashboard',     path: '/dashboard'     },
+  { icon: BellRing,        label: 'Alert Center',  path: '/alerts',        badge: 'NEW', badgeColor: '#ef4444' },
+  { icon: Bell,            label: 'Notifications', path: '/notifications'  },
 ];
 
 const HOME_ANALYTICS = [
@@ -49,8 +49,8 @@ const HOME_ANALYTICS = [
 ];
 
 const HOME_TOOLS = [
-  { icon: ArrowRightLeft,  label: 'Migration Advisor', path: '/migration-advisor', badge: 'NEW', badgeColor: '#6366f1' },
-  { icon: Radiation,       label: 'Automation',        path: '/automation',        badge: 'NEW', badgeColor: '#f97316' },
+  { icon: ArrowRightLeft, label: 'Migration Advisor', path: '/migration-advisor', badge: 'NEW', badgeColor: '#6366f1' },
+  { icon: Radiation,      label: 'Automation',        path: '/automation',        badge: 'NEW', badgeColor: '#f97316' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
@@ -63,12 +63,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
 
   const [intelOpen, setIntelOpen] = useState(true);
 
-  const bg       = isDark ? '#0d1424' : '#ffffff';
-  const border   = isDark ? '#1f2937' : '#e5e7eb';
-  const text     = isDark ? '#f9fafb' : '#111827';
-  const muted    = isDark ? '#9ca3af' : '#6b7280';
-  const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-  const activeBg = isDark ? 'rgba(99,102,241,0.15)'  : 'rgba(99,102,241,0.08)';
+  const bg        = isDark ? '#0d1424' : '#ffffff';
+  const border    = isDark ? '#1f2937' : '#e5e7eb';
+  const text      = isDark ? '#f9fafb' : '#111827';
+  const muted     = isDark ? '#9ca3af' : '#6b7280';
+  const hoverBg   = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
+  const activeBg  = isDark ? 'rgba(99,102,241,0.15)'  : 'rgba(99,102,241,0.08)';
   const sectionHd = isDark ? '#4b5563' : '#9ca3af';
 
   const isActive = (path: string) =>
@@ -97,10 +97,16 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
           transition: 'all 0.15s', position: 'relative', textAlign: 'left',
         }}
         onMouseEnter={e => {
-          if (!active) { (e.currentTarget as HTMLElement).style.background = hoverBg; (e.currentTarget as HTMLElement).style.color = text; }
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = hoverBg;
+            (e.currentTarget as HTMLElement).style.color = text;
+          }
         }}
         onMouseLeave={e => {
-          if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = muted; }
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            (e.currentTarget as HTMLElement).style.color = muted;
+          }
         }}
       >
         {active && (
@@ -155,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
       transition: 'width 0.3s cubic-bezier(0.4,0,0.2,1)', overflow: 'hidden',
     }}>
 
-      {/* Logo */}
+      {/* ── Logo ── */}
       <div style={{
         height: 60, display: 'flex', alignItems: 'center',
         justifyContent: collapsed ? 'center' : 'space-between',
@@ -199,10 +205,51 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
         </button>
       </div>
 
-      {/* Nav */}
+      {/* ── Add Cloud Account Button ── */}
+      <div style={{
+        padding: collapsed ? '10px 8px' : '10px 12px',
+        borderBottom: `1px solid ${border}`,
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={() => navigate('/connect')}
+          title={collapsed ? 'Add Cloud Account' : undefined}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: 8,
+            padding: collapsed ? '8px 0' : '8px 12px',
+            borderRadius: 10,
+            border: '1.5px dashed',
+            borderColor: isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.35)',
+            background: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)',
+            color: '#818cf8',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: "'DM Sans', system-ui, sans-serif",
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = isDark ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.12)';
+            (e.currentTarget as HTMLElement).style.borderColor = '#818cf8';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)';
+            (e.currentTarget as HTMLElement).style.borderColor = isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.35)';
+          }}
+        >
+          <PlusCircle size={15} style={{ flexShrink: 0 }} />
+          {!collapsed && <span>Add Cloud Account</span>}
+        </button>
+      </div>
+
+      {/* ── Nav ── */}
       <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 8px', scrollbarWidth: 'none' }}>
 
-        {/* ── PER-ACCOUNT NAV ── */}
+        {/* PER-ACCOUNT NAV */}
         {accountId && (
           <>
             <SectionLabel label="Account" />
@@ -222,10 +269,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                 }}
               >
                 <Sparkles size={11} color="#818cf8" />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#818cf8', flex: 1, textAlign: 'left' }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: '#818cf8', flex: 1, textAlign: 'left',
+                }}>
                   INTELLIGENCE
                 </span>
-                {intelOpen ? <ChevronDown size={11} style={{ color: sectionHd }} /> : <ChevronRight size={11} style={{ color: sectionHd }} />}
+                {intelOpen
+                  ? <ChevronDown size={11} style={{ color: sectionHd }} />
+                  : <ChevronRight size={11} style={{ color: sectionHd }} />}
               </button>
             ) : <div style={{ height: 6 }} />}
 
@@ -235,7 +287,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
           </>
         )}
 
-        {/* ── HOME NAV (no account selected) ── */}
+        {/* HOME NAV (no account selected) */}
         {!accountId && (
           <>
             <SectionLabel label="Overview" />
@@ -259,7 +311,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
         <NavItem icon={Settings} label="Settings" path="/settings" />
       </nav>
 
-      {/* Bottom version badge */}
+      {/* ── Bottom version badge ── */}
       {!collapsed && (
         <div style={{ padding: '12px 16px', borderTop: `1px solid ${border}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
