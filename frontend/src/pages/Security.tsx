@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import MainLayout from '../components/layout/MainLayout';
 import {
   Shield, ShieldAlert, ShieldCheck,
   AlertTriangle, CheckCircle, XCircle,
@@ -22,8 +23,10 @@ const Security: React.FC = () => {
     try {
       setLoading(true);
       setError('');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/cloud/accounts/${accountId}/security`
+        `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/cloud/accounts/${accountId}/security`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.ok) {
         setSecurityData(await response.json());
@@ -38,53 +41,56 @@ const Security: React.FC = () => {
     }
   };
 
-  // ── Config ───────────────────────────────────────────────────────────────────
   const SEV: Record<string, any> = {
-    CRITICAL: { label: 'Critical', leftBorder: 'border-l-red-500',    badge: 'bg-red-100 text-red-700',       dot: 'bg-red-500',    countColor: 'text-red-500',    subColor: 'text-red-400',    subText: 'Immediate action required', Icon: XCircle,       iconColor: 'text-red-400'    },
-    HIGH:     { label: 'High',     leftBorder: 'border-l-orange-400', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400', countColor: 'text-orange-500', subColor: 'text-orange-400', subText: 'Address soon',              Icon: AlertTriangle, iconColor: 'text-orange-400' },
-    MEDIUM:   { label: 'Medium',   leftBorder: 'border-l-yellow-400', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400', countColor: 'text-yellow-500', subColor: 'text-yellow-400', subText: 'Review when possible',      Icon: AlertTriangle, iconColor: 'text-yellow-400' },
-    LOW:      { label: 'Low',      leftBorder: 'border-l-blue-400',   badge: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-400',   countColor: 'text-blue-500',   subColor: 'text-blue-400',   subText: 'Monitor',                  Icon: Info,          iconColor: 'text-blue-400'   },
+    CRITICAL: { label: 'Critical', leftBorder: '#ef4444', badge: { bg: '#fef2f2', color: '#b91c1c' }, dot: '#ef4444', countColor: '#ef4444', subText: 'Immediate action required', Icon: XCircle,       iconColor: '#fca5a5' },
+    HIGH:     { label: 'High',     leftBorder: '#f97316', badge: { bg: '#fff7ed', color: '#c2410c' }, dot: '#f97316', countColor: '#f97316', subText: 'Address soon',              Icon: AlertTriangle, iconColor: '#fdba74' },
+    MEDIUM:   { label: 'Medium',   leftBorder: '#eab308', badge: { bg: '#fefce8', color: '#a16207' }, dot: '#eab308', countColor: '#ca8a04', subText: 'Review when possible',      Icon: AlertTriangle, iconColor: '#fde047' },
+    LOW:      { label: 'Low',      leftBorder: '#3b82f6', badge: { bg: '#eff6ff', color: '#1d4ed8' }, dot: '#3b82f6', countColor: '#3b82f6', subText: 'Monitor',                  Icon: Info,          iconColor: '#93c5fd' },
   };
 
   const scoreBand = (s: number) => {
-    if (s >= 80) return { label: 'Good',    bg: 'bg-green-50',  border: 'border-green-200',  scoreColor: 'text-green-600',  bar: 'bg-green-500',  Icon: ShieldCheck };
-    if (s >= 60) return { label: 'Fair',    bg: 'bg-yellow-50', border: 'border-yellow-200', scoreColor: 'text-yellow-600', bar: 'bg-yellow-400', Icon: Shield      };
-    if (s >= 40) return { label: 'Poor',    bg: 'bg-orange-50', border: 'border-orange-200', scoreColor: 'text-orange-600', bar: 'bg-orange-400', Icon: ShieldAlert };
-    return           { label: 'Critical', bg: 'bg-red-50',    border: 'border-red-200',    scoreColor: 'text-red-600',    bar: 'bg-red-500',    Icon: ShieldAlert };
+    if (s >= 80) return { label: 'Good',    bg: '#f0fdf4', border: '#bbf7d0', scoreColor: '#16a34a', bar: '#22c55e', Icon: ShieldCheck, iconColor: '#86efac' };
+    if (s >= 60) return { label: 'Fair',    bg: '#fefce8', border: '#fde68a', scoreColor: '#ca8a04', bar: '#eab308', Icon: Shield,      iconColor: '#fde047' };
+    if (s >= 40) return { label: 'Poor',    bg: '#fff7ed', border: '#fed7aa', scoreColor: '#ea580c', bar: '#f97316', Icon: ShieldAlert, iconColor: '#fdba74' };
+    return           { label: 'Critical', bg: '#fef2f2', border: '#fecaca', scoreColor: '#dc2626', bar: '#ef4444', Icon: ShieldAlert, iconColor: '#fca5a5' };
   };
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="flex items-center gap-2 text-gray-400">
-        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm">Scanning security posture...</span>
+    <MainLayout>
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ca3af' }}>
+          <div style={{ width: 16, height: 16, border: '2px solid #6366f1', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <span style={{ fontSize: 13 }}>Scanning security posture...</span>
+        </div>
       </div>
-    </div>
+    </MainLayout>
   );
 
   if (error) return (
-    <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-        <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-red-800">Error Loading Security Data</p>
-          <p className="text-xs text-red-600 mt-0.5">{error}</p>
-          <button onClick={fetchRealSecurity} className="mt-2 px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700">Retry</button>
+    <MainLayout>
+      <div style={{ padding: 24 }}>
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <AlertCircle size={16} color="#ef4444" style={{ marginTop: 1, flexShrink: 0 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#991b1b', margin: 0 }}>Error Loading Security Data</p>
+            <p style={{ fontSize: 12, color: '#dc2626', margin: '4px 0 0' }}>{error}</p>
+            <button onClick={fetchRealSecurity} style={{ marginTop: 10, padding: '6px 14px', background: '#dc2626', color: '#fff', fontSize: 12, border: 'none', borderRadius: 8, cursor: 'pointer' }}>Retry</button>
+          </div>
         </div>
       </div>
-    </div>
+    </MainLayout>
   );
 
   if (!securityData) return (
-    <div className="p-6">
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-xs text-yellow-800">
-        No security data available for this account.
+    <MainLayout>
+      <div style={{ padding: 24 }}>
+        <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 12, padding: 16, fontSize: 13, color: '#92400e' }}>
+          No security data available for this account.
+        </div>
       </div>
-    </div>
+    </MainLayout>
   );
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
   const score    = securityData.score || 0;
   const findings = securityData.findings || [];
   const band     = scoreBand(score);
@@ -101,180 +107,206 @@ const Security: React.FC = () => {
   const filtered = (filter === 'ALL' ? findings : findings.filter((f: any) => f.severity === filter))
     .sort((a: any, b: any) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
+    <MainLayout>
+      <div style={{ padding: '24px 28px', maxWidth: 900, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
-      {/* ── Header ────────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-2 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">Security Posture</h1>
-          <p className="text-xs text-gray-400 mt-0.5">{securityData.accountName || 'Cloud Account'}</p>
-        </div>
-        <button
-          onClick={fetchRealSecurity}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
-      </div>
-
-      {/* ── Score banner ──────────────────────────────────────────────────────── */}
-      <div className={`${band.bg} border ${band.border} rounded-2xl px-5 py-4 flex items-center justify-between`}>
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Overall Security Score</p>
-          <div className="flex items-end gap-2 mb-2.5">
-            <span className={`text-4xl font-black leading-none ${band.scoreColor}`}>{score}</span>
-            <span className="text-sm text-gray-400 mb-0.5">/100</span>
-            <span className={`ml-1 mb-0.5 px-2 py-0.5 text-[11px] font-bold rounded-full border ${band.bg} ${band.scoreColor} ${band.border}`}>
-              {band.label}
-            </span>
-          </div>
-          {/* Progress bar */}
-          <div className="w-48 h-1.5 bg-white/60 rounded-full overflow-hidden mb-2">
-            <div className={`h-full ${band.bar} rounded-full transition-all duration-700`} style={{ width: `${score}%` }} />
-          </div>
-          <p className="text-[11px] text-gray-400 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Last scanned: {new Date(securityData.scannedAt).toLocaleString()}
-          </p>
-        </div>
-        <BandIcon className={`w-14 h-14 ${band.scoreColor} opacity-[0.12]`} />
-      </div>
-
-      {/* ── Severity tiles ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-3">
-        {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).map(sev => {
-          const cfg = SEV[sev];
-          const { Icon } = cfg;
-          const active = filter === sev;
-          return (
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
             <button
-              key={sev}
-              onClick={() => setFilter(active ? 'ALL' : sev)}
-              className={`bg-white rounded-xl border border-gray-100 border-l-4 ${cfg.leftBorder} shadow-sm text-left p-4 transition-all ${active ? 'ring-2 ring-indigo-400 shadow-md' : 'hover:shadow-md'}`}
+              onClick={() => navigate(-1)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 8 }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-gray-500">{cfg.label}</span>
-                <Icon className={`w-4 h-4 ${cfg.iconColor}`} />
-              </div>
-              <div className={`text-2xl font-bold ${cfg.countColor} mb-0.5`}>{counts[sev]}</div>
-              <div className={`text-[11px] ${cfg.subColor}`}>{cfg.subText}</div>
+              <ArrowLeft size={13} /> Back
             </button>
-          );
-        })}
-      </div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: 0 }}>Security Posture</h1>
+            <p style={{ fontSize: 12, color: '#9ca3af', margin: '3px 0 0' }}>{securityData.accountName || 'Cloud Account'}</p>
+          </div>
+          <button
+            onClick={fetchRealSecurity}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#6366f1', color: '#fff', fontSize: 12, fontWeight: 500, border: 'none', borderRadius: 8, cursor: 'pointer' }}
+          >
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
 
-      {/* ── Findings card ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Score banner — compact 2-column */}
+        <div style={{ background: band.bg, border: `1px solid ${band.border}`, borderRadius: 16, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            {/* Score */}
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', margin: '0 0 4px' }}>Security Score</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 36, fontWeight: 800, lineHeight: 1, color: band.scoreColor }}>{score}</span>
+                <span style={{ fontSize: 13, color: '#9ca3af' }}>/100</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: band.bg, color: band.scoreColor, border: `1px solid ${band.border}` }}>
+                  {band.label}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div style={{ width: 160, height: 5, background: 'rgba(0,0,0,0.07)', borderRadius: 99, overflow: 'hidden', marginTop: 10 }}>
+                <div style={{ height: '100%', width: `${score}%`, background: band.bar, borderRadius: 99, transition: 'width 0.7s ease' }} />
+              </div>
+            </div>
+            {/* Divider */}
+            <div style={{ width: 1, height: 50, background: band.border }} />
+            {/* Last scan */}
+            <div>
+              <p style={{ fontSize: 11, color: '#9ca3af', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Clock size={11} /> Last scanned
+              </p>
+              <p style={{ fontSize: 12, color: '#374151', fontWeight: 500, margin: '3px 0 0' }}>
+                {new Date(securityData.scannedAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <BandIcon size={48} color={band.iconColor} style={{ opacity: 0.5, flexShrink: 0 }} />
+        </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-800">
-            Security Findings
-            <span className="ml-1.5 text-xs font-normal text-gray-400">({filtered.length})</span>
-          </h2>
-          <div className="flex gap-1.5">
-            {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(f => (
+        {/* Severity tiles — compact row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+          {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).map(sev => {
+            const cfg = SEV[sev];
+            const { Icon } = cfg;
+            const active = filter === sev;
+            return (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${filter === f ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                key={sev}
+                onClick={() => setFilter(active ? 'ALL' : sev)}
+                style={{
+                  background: active ? cfg.badge.bg : '#fff',
+                  border: `1px solid ${active ? cfg.leftBorder + '55' : '#e5e7eb'}`,
+                  borderLeft: `3px solid ${cfg.leftBorder}`,
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  boxShadow: active ? `0 0 0 2px ${cfg.leftBorder}33` : '0 1px 3px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s',
+                }}
               >
-                {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{cfg.label}</span>
+                  <Icon size={14} color={cfg.iconColor} />
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: cfg.countColor, lineHeight: 1 }}>{counts[sev]}</div>
+                <div style={{ fontSize: 10, color: cfg.countColor, opacity: 0.7, marginTop: 3 }}>{cfg.subText}</div>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        {/* List */}
-        {filtered.length === 0 ? (
-          <div className="py-14 text-center">
-            <ShieldCheck className="w-8 h-8 mx-auto text-green-400 mb-2" />
-            <p className="text-sm font-medium text-gray-700">
-              {findings.length === 0 ? 'No security findings — your account looks great!' : 'No findings for this filter'}
-            </p>
-            {findings.length > 0 && <p className="text-xs text-gray-400 mt-0.5">Try a different severity or view all</p>}
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {filtered.map((finding: any, index: number) => {
-              const cfg = SEV[finding.severity] || SEV['LOW'];
-              const open = expanded === index;
-              return (
-                <div key={index} className={`border-l-[3px] ${cfg.leftBorder} ${open ? 'bg-gray-50/60' : 'hover:bg-gray-50/30'} transition-colors`}>
+        {/* Findings card */}
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
 
-                  {/* Clickable header row */}
-                  <button
-                    className="w-full text-left px-5 py-3.5 flex items-start gap-3"
-                    onClick={() => setExpanded(open ? null : index)}
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid #f3f4f6' }}>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: '#1f2937', margin: 0 }}>
+              Security Findings <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>({filtered.length})</span>
+            </h2>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer', borderRadius: 8,
+                    background: filter === f ? '#6366f1' : '#f3f4f6',
+                    color: filter === f ? '#fff' : '#6b7280',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* List */}
+          {filtered.length === 0 ? (
+            <div style={{ padding: '48px 0', textAlign: 'center' }}>
+              <ShieldCheck size={28} color="#4ade80" style={{ margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 13, fontWeight: 500, color: '#374151', margin: 0 }}>
+                {findings.length === 0 ? 'No security findings — your account looks great!' : 'No findings for this filter'}
+              </p>
+              {findings.length > 0 && <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0' }}>Try a different severity</p>}
+            </div>
+          ) : (
+            <div>
+              {filtered.map((finding: any, index: number) => {
+                const cfg = SEV[finding.severity] || SEV['LOW'];
+                const { Icon } = cfg;
+                const open = expanded === index;
+                return (
+                  <div
+                    key={index}
+                    style={{ borderLeft: `3px solid ${cfg.leftBorder}`, borderBottom: '1px solid #f9fafb', background: open ? '#fafafa' : '#fff', transition: 'background 0.15s' }}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide ${cfg.badge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                          {finding.severity}
-                        </span>
-                        <span className="text-sm font-semibold text-gray-800">{finding.title}</span>
+                    <button
+                      onClick={() => setExpanded(open ? null : index)}
+                      style={{ width: '100%', textAlign: 'left', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', background: cfg.badge.bg, color: cfg.badge.color, flexShrink: 0 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
+                        {finding.severity}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: open ? 'normal' : 'nowrap' }}>
+                        {finding.title}
+                      </span>
+                      {!open && <p style={{ fontSize: 11, color: '#9ca3af', margin: 0, flexShrink: 0, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{finding.description}</p>}
+                      {open ? <ChevronUp size={13} color="#d1d5db" style={{ flexShrink: 0 }} /> : <ChevronDown size={13} color="#d1d5db" style={{ flexShrink: 0 }} />}
+                    </button>
+
+                    {open && (
+                      <div style={{ padding: '0 18px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {finding.description && (
+                          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>{finding.description}</p>
+                        )}
+                        {finding.resource && (
+                          <div style={{ background: '#f3f4f6', borderRadius: 8, padding: '8px 12px' }}>
+                            <p style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 3px' }}>Affected Resource</p>
+                            <code style={{ fontSize: 11, color: '#374151', fontFamily: 'monospace', wordBreak: 'break-all' }}>{finding.resource}</code>
+                          </div>
+                        )}
+                        {finding.remediation && (
+                          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px' }}>
+                            <p style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CheckCircle size={10} /> Remediation
+                            </p>
+                            <p style={{ fontSize: 12, color: '#15803d', margin: 0, lineHeight: 1.5 }}>{finding.remediation}</p>
+                          </div>
+                        )}
+                        {finding.compliance && finding.compliance.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Tag size={11} color="#d1d5db" />
+                            <span style={{ fontSize: 10, color: '#9ca3af' }}>Compliance:</span>
+                            {finding.compliance.map((fw: string, idx: number) => (
+                              <span key={idx} style={{ padding: '2px 8px', background: '#f5f3ff', color: '#6d28d9', fontSize: 11, fontWeight: 500, borderRadius: 99, border: '1px solid #ede9fe' }}>
+                                {fw}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-400 truncate">{finding.description}</p>
-                    </div>
-                    {open
-                      ? <ChevronUp   className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1" />
-                      : <ChevronDown className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1" />
-                    }
-                  </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-                  {/* Expanded detail */}
-                  {open && (
-                    <div className="px-5 pb-4 space-y-2.5">
-                      {finding.resource && (
-                        <div className="bg-gray-100 rounded-lg px-3 py-2.5">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Affected Resource</p>
-                          <code className="text-xs text-gray-700 font-mono break-all">{finding.resource}</code>
-                        </div>
-                      )}
-                      {finding.remediation && (
-                        <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2.5">
-                          <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide mb-1 flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" /> Remediation Steps
-                          </p>
-                          <p className="text-xs text-green-700 leading-relaxed">{finding.remediation}</p>
-                        </div>
-                      )}
-                      {finding.compliance && finding.compliance.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                          <Tag className="w-3 h-3 text-gray-300" />
-                          <span className="text-[10px] text-gray-400">Compliance:</span>
-                          {finding.compliance.map((fw: string, idx: number) => (
-                            <span key={idx} className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[11px] font-medium rounded-full border border-violet-100">
-                              {fw}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Footer */}
+          <div style={{ padding: '10px 18px', borderTop: '1px solid #f3f4f6', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Clock size={11} />
+              {new Date(securityData.scannedAt).toLocaleString()} · {securityData.provider} Account
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: band.scoreColor }}>Score: {score}/100 — {band.label}</span>
           </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-          <span className="text-xs text-gray-400 flex items-center gap-1.5">
-            <Clock className="w-3 h-3" />
-            {new Date(securityData.scannedAt).toLocaleString()} · {securityData.provider} Account
-          </span>
-          <span className={`text-xs font-semibold ${band.scoreColor}`}>Score: {score}/100 — {band.label}</span>
         </div>
       </div>
-
-    </div>
+    </MainLayout>
   );
 };
 

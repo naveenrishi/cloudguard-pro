@@ -33,6 +33,7 @@ import Onboarding              from './pages/Onboarding';
 import NotificationsPage       from './pages/Notifications';
 import BillingPage             from './pages/Billing';
 import Automation              from './pages/Automation';
+import AlertCenter             from './pages/AlertCenter';
 import { ThemeProvider }       from './context/ThemeContext';
 import React                   from 'react';
 // ── Intelligence Pages ──────────────────────────────────────────────────────
@@ -78,8 +79,9 @@ function App() {
           {/* ── MAIN DASHBOARD ─────────────────────────────────────────────── */}
           <Route path="/dashboard" element={<RequireOnboarding><NewDashboard /></RequireOnboarding>} />
 
-          {/* ── NOTIFICATIONS ──────────────────────────────────────────────── */}
+          {/* ── NOTIFICATIONS & ALERTS ─────────────────────────────────────── */}
           <Route path="/notifications" element={<RequireOnboarding><NotificationsPage /></RequireOnboarding>} />
+          <Route path="/alerts"        element={<RequireOnboarding><AlertCenter /></RequireOnboarding>}       />
 
           {/* ── ACCOUNT-SPECIFIC ROUTES ────────────────────────────────────── */}
           <Route path="/account/:accountId/overview"          element={<RequireOnboarding><Overview /></RequireOnboarding>}                />
@@ -92,6 +94,7 @@ function App() {
           <Route path="/account/:accountId/databases"         element={<RequireOnboarding><Databases /></RequireOnboarding>}               />
           <Route path="/account/:accountId/migration-advisor" element={<RequireOnboarding><AccountMigrationAdvisor /></RequireOnboarding>} />
           <Route path="/account/:accountId/nuke"              element={<RequireOnboarding><AccountNuke /></RequireOnboarding>}             />
+          <Route path="/account/:accountId/alerts"            element={<RequireOnboarding><AlertCenter /></RequireOnboarding>}             />
           <Route path="/account/:accountId/activity"             element={<RequireOnboarding><ChangeInvestigation /></RequireOnboarding>} />
           <Route path="/account/:accountId/audit"                element={<RequireOnboarding><ChangeInvestigation /></RequireOnboarding>} />
           <Route path="/account/:accountId/audit-logs"           element={<RequireOnboarding><ChangeInvestigation /></RequireOnboarding>} />

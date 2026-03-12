@@ -27,7 +27,7 @@ router.post('/message', async (req: Request, res: Response) => {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model:      'gpt-4o',
+        model:      'gpt-3.5-turbo',
         max_tokens: 1024,
         messages: [
           { role: 'system', content: systemPrompt || 'You are CloudGuard AI, a helpful cloud management assistant.' },
