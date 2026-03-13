@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import OpenAI from 'openai';
 import reportsRouter from './routes/reports.routes';
 import gcpRouter from './routes/gcp.routes';
 import apiRouter from './routes/index';
@@ -14,9 +13,6 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// ── OpenAI client ─────────────────────────────────────────────────────────────
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ── Encryption ────────────────────────────────────────────────────────────────
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'fallback-key-32-chars-minimum-xx';
@@ -167,24 +163,55 @@ app.get('/api/health/status',           (_req, res) => res.json({ status: 'healt
 app.get('/api/health/version-updates',  (_req, res) => res.json({ currentVersion: '1.0.0', latestVersion: '1.0.0', updateAvailable: false }));
 
 // ============================================
-// CHATBOT
+// CHATBOT — inline, no OpenAI import at top level
 // ============================================
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, system } = req.body;
     if (!messages || !Array.isArray(messages) || messages.length === 0)
       return res.status(400).json({ error: 'messages array is required' });
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o', max_tokens: 1000,
-      messages: [
-        { role: 'system', content: system || 'You are a helpful cloud cost management assistant.' },
-        ...messages,
-      ],
-    });
-    res.json({ content: response.choices[0]?.message?.content || '' });
+
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const openaiKey    = process.env.OPENAI_API_KEY;
+
+    if (anthropicKey) {
+      // Use Anthropic Claude
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1000,
+          system: system || 'You are a helpful cloud cost management assistant.',
+          messages,
+        }),
+      });
+      const data: any = await response.json();
+      return res.json({ content: data.content?.[0]?.text || '' });
+
+    } else if (openaiKey) {
+      // Fallback to OpenAI
+      const { default: OpenAI } = require('openai');
+      const openai = new OpenAI({ apiKey: openaiKey });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o', max_tokens: 1000,
+        messages: [
+          { role: 'system', content: system || 'You are a helpful cloud cost management assistant.' },
+          ...messages,
+        ],
+      });
+      return res.json({ content: response.choices[0]?.message?.content || '' });
+
+    } else {
+      return res.status(500).json({ error: 'No AI API key configured (ANTHROPIC_API_KEY or OPENAI_API_KEY)' });
+    }
   } catch (error: any) {
-    console.error('[ChatBot] OpenAI error:', error?.message || error);
-    res.status(500).json({ error: error?.message || 'Failed to call OpenAI API' });
+    console.error('[ChatBot] error:', error?.message || error);
+    res.status(500).json({ error: error?.message || 'Failed to call AI API' });
   }
 });
 
@@ -256,7 +283,7 @@ app.post('/api/cloud/accounts/azure/connect', async (req, res) => {
 });
 
 // ============================================
-// CONNECT GCP  (registered at both URLs)
+// CONNECT GCP
 // ============================================
 async function handleGCPConnect(req: any, res: any) {
   const { accountName, serviceAccountKey } = req.body;
@@ -300,7 +327,6 @@ async function handleGCPConnect(req: any, res: any) {
   }
 }
 
-// Both paths work — old frontend URL and new gcp router URL
 app.post('/api/cloud/accounts/gcp/connect', handleGCPConnect);
 app.post('/api/gcp/connect',                handleGCPConnect);
 
@@ -341,7 +367,7 @@ async function fetchGCPCosts(creds: any): Promise<{
         const name = item.service?.description || 'Other';
         if (cost > 0.001) { serviceMap[name] = (serviceMap[name] || 0) + cost; currentMonthTotal += cost; }
       }
-    } else { console.warn(`⚠️  GCP Billing Reports API status: ${costResp.status}`); }
+    }
 
     const monthlyData: { month: string; total: number }[] = [];
     for (let i = 11; i >= 0; i--) {
@@ -374,7 +400,6 @@ async function fetchGCPCosts(creds: any): Promise<{
       .map(([name, cost]) => ({ name, cost, percentage: currentMonthTotal > 0 ? (cost / currentMonthTotal) * 100 : 0 }))
       .sort((a, b) => b.cost - a.cost);
 
-    console.log(`   📤 GCP: currentMonth=$${currentMonthTotal.toFixed(2)} lastMonth=$${lastMonthTotal.toFixed(2)} year=$${yearTotal.toFixed(2)}`);
     return { currentMonthTotal, lastMonthTotal, forecast, yearTotal, services, monthlyData };
   } catch (e: any) { console.warn('⚠️  GCP cost fetch error:', e.message); return empty; }
 }
@@ -412,7 +437,6 @@ async function fetchGCPResources(creds: any): Promise<any[]> {
         resources.push({ id: b.id, name: b.name, type: 'Cloud Storage Bucket', state: 'Active', region: b.location || 'global' });
     } catch (e: any) { console.warn('   ⚠️  GCP buckets error:', e.message); }
 
-    console.log(`   📦 GCP Resources: ${resources.length}`);
   } catch (e: any) { console.warn('⚠️  GCP resources fetch error:', e.message); }
   return resources;
 }
@@ -441,8 +465,7 @@ async function fetchGCPSecurity(creds: any): Promise<{ score: number; findings: 
       else if (severity === 'MEDIUM')   score -= 3;
       else if (severity === 'LOW')      score -= 1;
     }
-    console.log(`   🔒 GCP Security: score=${score} findings=${findings.length}`);
-  } catch (e: any) { console.warn('⚠️  GCP security fetch error (SCC may not be enabled):', e.message); }
+  } catch (e: any) { console.warn('⚠️  GCP security fetch error:', e.message); }
   return { score: Math.max(0, score), findings };
 }
 
@@ -480,8 +503,6 @@ async function fetchAWSCosts(creds: { accessKeyId: string; secretAccessKey: stri
   const ce = new CostExplorerClient({ region: 'us-east-1', credentials: creds });
   const dates = getDateRanges();
 
-  console.log(`📅 AWS CE: ${dates.currentMonthStart} → ${dates.currentMonthEnd} | last: ${dates.lastMonthStart} → ${dates.lastMonthEnd}`);
-
   const [currentMonthData, lastMonthData] = await Promise.all([
     ce.send(new GetCostAndUsageCommand({ TimePeriod: { Start: dates.currentMonthStart, End: dates.currentMonthEnd }, Granularity: 'MONTHLY', Metrics: ['UnblendedCost'], GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }] })),
     ce.send(new GetCostAndUsageCommand({ TimePeriod: { Start: dates.lastMonthStart, End: dates.lastMonthEnd }, Granularity: 'MONTHLY', Metrics: ['UnblendedCost'], GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }] })),
@@ -491,8 +512,6 @@ async function fetchAWSCosts(creds: { accessKeyId: string; secretAccessKey: stri
   const lastMonthResult    = lastMonthData.ResultsByTime?.[0];
   const currentMonthTotal  = (currentMonthResult?.Groups || []).reduce((s: number, g: any) => s + parseFloat(g.Metrics?.UnblendedCost?.Amount || '0'), 0);
   const lastMonthTotal     = (lastMonthResult?.Groups || []).reduce((s: number, g: any) => s + parseFloat(g.Metrics?.UnblendedCost?.Amount || '0'), 0);
-
-  console.log(`💰 AWS CE: current=$${currentMonthTotal.toFixed(2)} last=$${lastMonthTotal.toFixed(2)}`);
 
   const services = (currentMonthResult?.Groups || [])
     .map((g: any) => ({ name: g.Keys?.[0] || 'Unknown', cost: parseFloat(g.Metrics?.UnblendedCost?.Amount || '0'), percentage: 0 }))
@@ -517,7 +536,6 @@ async function fetchAWSCosts(creds: { accessKeyId: string; secretAccessKey: stri
   }
 
   const yearTotal = monthlyData.reduce((s: number, m: any) => s + m.total, 0);
-  console.log(`   📤 AWS year=$${yearTotal.toFixed(2)} months=${monthlyData.length}`);
   return { currentMonthTotal, lastMonthTotal, forecast, yearTotal, services, monthlyData };
 }
 
@@ -544,8 +562,8 @@ async function azureQueryWithRetry(client: any, scope: string, body: any, maxRet
 async function fetchAzureCosts(creds: any) {
   const subId = creds.subscriptionId;
   const cached = azureCostCache.get(subId);
-  if (cached && Date.now() - cached.fetchedAt < 5 * 60 * 1000) { console.log(`   ✅ Azure costs from cache`); return cached.data; }
-  if (azureFetchInFlight.has(subId)) { console.log(`   ⏳ Azure fetch in-flight — waiting`); return azureFetchInFlight.get(subId); }
+  if (cached && Date.now() - cached.fetchedAt < 5 * 60 * 1000) return cached.data;
+  if (azureFetchInFlight.has(subId)) return azureFetchInFlight.get(subId);
   const fetchPromise = _doFetchAzureCosts(creds);
   azureFetchInFlight.set(subId, fetchPromise);
   try {
@@ -564,8 +582,6 @@ async function _doFetchAzureCosts(creds: any) {
   const dates      = getDateRanges();
   const trendEnd   = fmtDate(new Date(Date.UTC(dates.y, dates.mo, 0)));
   const trendStart = fmtDate(new Date(Date.UTC(dates.y, dates.mo - 11, 1)));
-
-  console.log(`\n💙 Azure costs: ${creds.subscriptionId}`);
 
   const curResult = await azureQueryWithRetry(client, scope, {
     type: 'ActualCost', timeframe: 'Custom',
@@ -615,7 +631,6 @@ async function _doFetchAzureCosts(creds: any) {
     });
     for (const row of (lastResult.rows || [])) lastMonthTotal += parseFloat(String(row[0])) || 0;
   } catch (e: any) {
-    console.warn(`   ⚠️  Last month call failed: ${e.message}`);
     const lbl = new Date(Date.UTC(dates.y, dates.mo - 1, 1)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     lastMonthTotal = monthlyData.find(m => m.month === lbl)?.total || 0;
   }
@@ -625,7 +640,6 @@ async function _doFetchAzureCosts(creds: any) {
 
   const forecast  = (dates.d > 0 ? currentMonthTotal / dates.d : 0) * dates.daysInCurrentMonth;
   const yearTotal = monthlyData.reduce((s, m) => s + m.total, 0);
-  console.log(`   📤 Azure: current=$${currentMonthTotal.toFixed(2)} last=$${lastMonthTotal.toFixed(2)} year=$${yearTotal.toFixed(2)}`);
   return { currentMonthTotal, lastMonthTotal, forecast, yearTotal, services, monthlyData };
 }
 
@@ -680,8 +694,8 @@ async function fetchAzureSecurity(creds: any): Promise<{ score: number; findings
 async function scanAzureNukeResources(creds: any): Promise<AzureNukeResource[]> {
   const targets: AzureNukeResource[] = [];
   try {
-    const { ClientSecretCredential }  = require('@azure/identity');
-    const { ComputeManagementClient } = require('@azure/arm-compute');
+    const { ClientSecretCredential }   = require('@azure/identity');
+    const { ComputeManagementClient }  = require('@azure/arm-compute');
     const { ResourceManagementClient } = require('@azure/arm-resources');
     const credential     = new ClientSecretCredential(creds.tenantId, creds.clientId, creds.clientSecret);
     const computeClient  = new ComputeManagementClient(credential, creds.subscriptionId);
@@ -693,21 +707,21 @@ async function scanAzureNukeResources(creds: any): Promise<AzureNukeResource[]> 
         const iv = await computeClient.virtualMachines.instanceView(vm.id!.split('/')[4], vm.name!);
         const ps = (iv.statuses || []).find((s: any) => s.code?.startsWith('PowerState/'))?.code || '';
         if (ps === 'PowerState/deallocated' || ps === 'PowerState/stopped')
-          targets.push({ id: vm.id!, name: vm.name!, type: 'Stopped VM', resourceGroup: vm.id!.split('/')[4], region: vm.location!, risk: 'HIGH', reason: `VM is ${ps.replace('PowerState/', '')} but disks still incur cost`, estimatedSavings: 15 });
+          targets.push({ id: vm.id!, name: vm.name!, type: 'Stopped VM', resourceGroup: vm.id!.split('/')[4], region: vm.location!, risk: 'HIGH', reason: `VM is ${ps.replace('PowerState/', '')}`, estimatedSavings: 15 });
       } catch (_) {}
     }
 
     const disks = await collectAsync(computeClient.disks.list());
     for (const disk of disks)
       if (!disk.managedBy && disk.diskState !== 'Reserved')
-        targets.push({ id: disk.id!, name: disk.name!, type: 'Unattached Disk', resourceGroup: disk.id!.split('/')[4], region: disk.location!, risk: 'MEDIUM', reason: `Disk (${disk.diskSizeGB || 0}GB) not attached to any VM`, estimatedSavings: Math.round((disk.diskSizeGB || 0) * 0.05) });
+        targets.push({ id: disk.id!, name: disk.name!, type: 'Unattached Disk', resourceGroup: disk.id!.split('/')[4], region: disk.location!, risk: 'MEDIUM', reason: `Disk (${disk.diskSizeGB || 0}GB) not attached`, estimatedSavings: Math.round((disk.diskSizeGB || 0) * 0.05) });
 
     const rgs = await collectAsync(resourceClient.resourceGroups.list());
     for (const rg of rgs) {
       try {
         const items = await collectAsync(resourceClient.resources.listByResourceGroup(rg.name!));
         if (items.length === 0)
-          targets.push({ id: rg.id!, name: rg.name!, type: 'Empty Resource Group', resourceGroup: rg.name!, region: rg.location!, risk: 'LOW', reason: 'Resource group has no resources', estimatedSavings: 0 });
+          targets.push({ id: rg.id!, name: rg.name!, type: 'Empty Resource Group', resourceGroup: rg.name!, region: rg.location!, risk: 'LOW', reason: 'No resources', estimatedSavings: 0 });
       } catch (_) {}
     }
 
@@ -716,14 +730,14 @@ async function scanAzureNukeResources(creds: any): Promise<AzureNukeResource[]> 
     for (const snap of snaps) {
       const created = snap.timeCreated ? new Date(snap.timeCreated) : null;
       if (created && created < thirtyDaysAgo)
-        targets.push({ id: snap.id!, name: snap.name!, type: 'Old Snapshot', resourceGroup: snap.id!.split('/')[4], region: snap.location!, risk: 'LOW', reason: `Snapshot ${Math.floor((Date.now() - created.getTime()) / 86400000)} days old`, estimatedSavings: Math.round((snap.diskSizeGB || 0) * 0.03) });
+        targets.push({ id: snap.id!, name: snap.name!, type: 'Old Snapshot', resourceGroup: snap.id!.split('/')[4], region: snap.location!, risk: 'LOW', reason: `${Math.floor((Date.now() - created.getTime()) / 86400000)} days old`, estimatedSavings: Math.round((snap.diskSizeGB || 0) * 0.03) });
     }
   } catch (e: any) { console.warn('⚠️  Azure nuke scan error:', e.message); }
   return targets;
 }
 
 // ============================================
-// AZURE ADVISOR
+// AZURE ADVISOR / RESOURCE GROUPS / ACTIVITY
 // ============================================
 async function fetchAzureAdvisor(creds: any): Promise<any[]> {
   const recommendations: any[] = [];
@@ -736,16 +750,12 @@ async function fetchAzureAdvisor(creds: any): Promise<any[]> {
     const data: any = await response.json();
     for (const rec of (data.value || [])) {
       const props = rec.properties || {};
-      recommendations.push({ id: rec.id, category: props.category || 'General', impact: props.impact || 'Medium', title: props.shortDescription?.solution || props.shortDescription?.problem || 'Recommendation', description: props.shortDescription?.problem || '', effort: props.impact === 'High' ? 'LOW' : props.impact === 'Medium' ? 'MEDIUM' : 'HIGH', estimatedSaving: props.extendedProperties?.savingsAmount ? parseFloat(props.extendedProperties.savingsAmount) : undefined });
+      recommendations.push({ id: rec.id, category: props.category || 'General', impact: props.impact || 'Medium', title: props.shortDescription?.solution || props.shortDescription?.problem || 'Recommendation', description: props.shortDescription?.problem || '', effort: props.impact === 'High' ? 'LOW' : 'HIGH', estimatedSaving: props.extendedProperties?.savingsAmount ? parseFloat(props.extendedProperties.savingsAmount) : undefined });
     }
-    console.log(`   💡 Azure Advisor: ${recommendations.length} recommendations`);
   } catch (e: any) { console.warn('⚠️  Azure Advisor error:', e.message); }
   return recommendations;
 }
 
-// ============================================
-// AZURE RESOURCE GROUPS
-// ============================================
 async function fetchAzureResourceGroups(creds: any): Promise<{ name: string; cost: number; resources: number }[]> {
   const groups: { name: string; cost: number; resources: number }[] = [];
   try {
@@ -774,8 +784,7 @@ async function fetchAzureResourceGroups(creds: any): Promise<{ name: string; cos
         const cost = parseFloat(String(row[0])) || 0;
         if (name && name !== 'Unknown') groups.push({ name, cost, resources: rgCount[name.toLowerCase()] || 0 });
       }
-    } catch (costErr: any) {
-      console.warn(`   ⚠️  RG cost grouping failed — showing resource counts only`);
+    } catch (_) {
       for (const rgName of Array.from(rgNames))
         groups.push({ name: rgName, cost: 0, resources: rgCount[rgName.toLowerCase()] || 0 });
     }
@@ -784,9 +793,6 @@ async function fetchAzureResourceGroups(creds: any): Promise<{ name: string; cos
   return groups;
 }
 
-// ============================================
-// AZURE ACTIVITY LOGS
-// ============================================
 async function fetchAzureActivity(creds: any): Promise<any[]> {
   const activities: any[] = [];
   try {
@@ -802,9 +808,8 @@ async function fetchAzureActivity(creds: any): Promise<any[]> {
     const data: any = await response.json();
     for (const event of (data.value || []).slice(0, 50)) {
       if (event.status?.value === 'Started') continue;
-      activities.push({ operationName: event.operationName?.localizedValue || event.operationName?.value || 'Operation', resourceGroup: event.resourceGroupName || 'N/A', caller: event.caller || 'System', eventTimestamp: event.eventTimestamp, status: event.status?.value || '' });
+      activities.push({ operationName: event.operationName?.localizedValue || 'Operation', resourceGroup: event.resourceGroupName || 'N/A', caller: event.caller || 'System', eventTimestamp: event.eventTimestamp, status: event.status?.value || '' });
     }
-    console.log(`   📋 Azure Activity: ${activities.length} events`);
   } catch (e: any) { console.warn('⚠️  Azure Activity error:', e.message); }
   return activities;
 }
@@ -820,7 +825,7 @@ app.get('/api/azure/nuke/:accountId', async (req, res) => {
     job = { id: `nuke-${account.id}`, accountId: account.id, scheduledAt: getNextFriday6pm().toISOString(), status: 'scheduled', dryRun: true, resources: [] };
     azureNukeJobs[account.id] = job;
   }
-  res.json({ ...job, nextScheduled: getNextFriday6pm().toISOString(), totalWaste: job.resources.reduce((s, r) => s + r.estimatedSavings, 0), breakdown: { stoppedVMs: job.resources.filter(r => r.type === 'Stopped VM').length, unattachedDisks: job.resources.filter(r => r.type === 'Unattached Disk').length, emptyRGs: job.resources.filter(r => r.type === 'Empty Resource Group').length, oldSnapshots: job.resources.filter(r => r.type === 'Old Snapshot').length } });
+  res.json({ ...job, nextScheduled: getNextFriday6pm().toISOString(), totalWaste: job.resources.reduce((s, r) => s + r.estimatedSavings, 0) });
 });
 
 app.post('/api/azure/nuke/:accountId/dry-run', async (req, res) => {
@@ -828,7 +833,7 @@ app.post('/api/azure/nuke/:accountId/dry-run', async (req, res) => {
   if (!account) return res.status(404).json({ error: 'Azure account not found' });
   try {
     const resources = await scanAzureNukeResources(getCredentials(account));
-    azureNukeJobs[account.id] = { id: `nuke-${account.id}`, accountId: account.id, scheduledAt: getNextFriday6pm().toISOString(), status: 'dry_run_complete', dryRun: true, resources, lastRunAt: new Date().toISOString(), lastRunResult: `Found ${resources.length} resources to clean.` };
+    azureNukeJobs[account.id] = { id: `nuke-${account.id}`, accountId: account.id, scheduledAt: getNextFriday6pm().toISOString(), status: 'dry_run_complete', dryRun: true, resources, lastRunAt: new Date().toISOString(), lastRunResult: `Found ${resources.length} resources.` };
     res.json({ message: `Dry-run complete. Found ${resources.length} resources.`, resources, totalWaste: resources.reduce((s, r) => s + r.estimatedSavings, 0) });
   } catch (error: any) { res.status(500).json({ error: 'Dry-run failed', details: error.message }); }
 });
@@ -840,28 +845,22 @@ app.post('/api/azure/nuke/:accountId/cancel', (req, res) => {
   res.json({ message: 'Nuke job cancelled', nextScheduled: getNextFriday6pm().toISOString() });
 });
 
-// ============================================
-// AZURE ADVISOR / RESOURCE GROUPS / ACTIVITY
-// ============================================
 app.get('/api/azure/advisor/:accountId', async (req, res) => {
   const account = connectedAccounts.find(a => a.id === req.params.accountId && a.provider === 'AZURE');
   if (!account) return res.status(404).json({ error: 'Azure account not found' });
-  const recommendations = await fetchAzureAdvisor(getCredentials(account));
-  res.json({ recommendations, fetchedAt: new Date().toISOString() });
+  res.json({ recommendations: await fetchAzureAdvisor(getCredentials(account)), fetchedAt: new Date().toISOString() });
 });
 
 app.get('/api/azure/resource-groups/:accountId', async (req, res) => {
   const account = connectedAccounts.find(a => a.id === req.params.accountId && a.provider === 'AZURE');
   if (!account) return res.status(404).json({ error: 'Azure account not found' });
-  const groups = await fetchAzureResourceGroups(getCredentials(account));
-  res.json({ groups, fetchedAt: new Date().toISOString() });
+  res.json({ groups: await fetchAzureResourceGroups(getCredentials(account)), fetchedAt: new Date().toISOString() });
 });
 
 app.get('/api/azure/activity/:accountId', async (req, res) => {
   const account = connectedAccounts.find(a => a.id === req.params.accountId && a.provider === 'AZURE');
   if (!account) return res.status(404).json({ error: 'Azure account not found' });
-  const activities = await fetchAzureActivity(getCredentials(account));
-  res.json({ activities, fetchedAt: new Date().toISOString() });
+  res.json({ activities: await fetchAzureActivity(getCredentials(account)), fetchedAt: new Date().toISOString() });
 });
 
 // ============================================
@@ -875,7 +874,7 @@ app.get('/api/cloud/accounts/:accountId/costs', async (req, res) => {
     if      (account.provider === 'AWS')   r = await fetchAWSCosts(getCredentials(account));
     else if (account.provider === 'AZURE') r = await fetchAzureCosts(getCredentials(account));
     else if (account.provider === 'GCP')   r = await fetchGCPCosts(getCredentials(account));
-    else return res.json({ currentMonth: 0, lastMonth: 0, forecast: 0, yearTotal: 0, monthlyData: [], services: [], currency: 'USD', accountId: account.accountId, accountName: account.accountName });
+    else return res.json({ currentMonth: 0, lastMonth: 0, forecast: 0, yearTotal: 0, monthlyData: [], services: [], currency: 'USD' });
     res.json({ currentMonth: r.currentMonthTotal, lastMonth: r.lastMonthTotal, forecast: r.forecast, yearTotal: r.yearTotal, monthlyData: r.monthlyData, services: r.services, currency: 'USD', accountId: account.accountId, accountName: account.accountName });
   } catch (e: any) { res.status(500).json({ error: 'Failed to fetch costs', details: e.message }); }
 });
@@ -959,11 +958,8 @@ app.get('/api/cloud/accounts/:accountId/security', async (req, res) => {
 // DASHBOARD
 // ============================================
 app.get('/api/cloud/dashboard/:accountId', async (req, res) => {
-  const { accountId } = req.params;
-  console.log(`\n📊 DASHBOARD: ${accountId}`);
-  const account = connectedAccounts.find(a => a.id === accountId);
+  const account = connectedAccounts.find(a => a.id === req.params.accountId);
   if (!account) return res.status(404).json({ error: 'Account not found' });
-  console.log(`✅ ${account.accountName} | ${account.provider}`);
 
   if (account.provider === 'AWS') {
     try {
@@ -991,15 +987,13 @@ app.get('/api/cloud/dashboard/:accountId', async (req, res) => {
         if (report.Content) Buffer.from(report.Content).toString('utf-8').split('\n').slice(1).forEach((line: string) => { const f = line.split(','); if (f.length >= 15 && f[3] === 'true' && f[7] !== 'true') securityScore -= 5; });
         securityScore -= 10;
       } catch (e) {}
-      const response = { accountId: account.accountId, accountName: account.accountName, provider: account.provider, region: account.region, status: 'Active', totalCost: costResult.currentMonthTotal, lastMonthCost: costResult.lastMonthTotal, yearTotal: costResult.yearTotal, forecast: costResult.forecast, resourceCount, securityScore: Math.max(0, securityScore), topServices: costResult.services.slice(0, 5), monthlyData: costResult.monthlyData };
-      console.log(`📤 AWS dashboard: current=$${response.totalCost.toFixed(2)} resources=${response.resourceCount}`);
-      res.json(response);
+      res.json({ accountId: account.accountId, accountName: account.accountName, provider: account.provider, region: account.region, status: 'Active', totalCost: costResult.currentMonthTotal, lastMonthCost: costResult.lastMonthTotal, yearTotal: costResult.yearTotal, forecast: costResult.forecast, resourceCount, securityScore: Math.max(0, securityScore), topServices: costResult.services.slice(0, 5), monthlyData: costResult.monthlyData });
     } catch (e: any) { res.status(500).json({ error: 'Failed to fetch dashboard', details: e.message }); }
 
   } else if (account.provider === 'AZURE') {
     const creds = getCredentials(account);
     const [costResult, resources, security] = await Promise.all([
-      fetchAzureCosts(creds).catch((e: any) => { console.error('❌ Azure cost error:', e.message); return { currentMonthTotal: 0, lastMonthTotal: 0, forecast: 0, yearTotal: 0, services: [], monthlyData: [] }; }),
+      fetchAzureCosts(creds).catch(() => ({ currentMonthTotal: 0, lastMonthTotal: 0, forecast: 0, yearTotal: 0, services: [], monthlyData: [] })),
       fetchAzureResources(creds).catch(() => [] as any[]),
       fetchAzureSecurity(creds).catch(() => ({ score: 0, findings: [] })),
     ]);
@@ -1008,7 +1002,7 @@ app.get('/api/cloud/dashboard/:accountId', async (req, res) => {
   } else if (account.provider === 'GCP') {
     const creds = getCredentials(account);
     const [costResult, resources, security] = await Promise.all([
-      fetchGCPCosts(creds).catch((e: any) => { console.error('❌ GCP cost error:', e.message); return { currentMonthTotal: 0, lastMonthTotal: 0, forecast: 0, yearTotal: 0, services: [], monthlyData: [] }; }),
+      fetchGCPCosts(creds).catch(() => ({ currentMonthTotal: 0, lastMonthTotal: 0, forecast: 0, yearTotal: 0, services: [], monthlyData: [] })),
       fetchGCPResources(creds).catch(() => [] as any[]),
       fetchGCPSecurity(creds).catch(() => ({ score: 75, findings: [] })),
     ]);
@@ -1022,20 +1016,20 @@ app.get('/api/cloud/dashboard/:accountId', async (req, res) => {
 // ============================================
 // LEGACY STUBS
 // ============================================
-app.get('/api/budgets/:accountId',                  (_req, res) => res.json({}));
-app.get('/api/budgets/activity/:accountId',         (_req, res) => res.json([]));
-app.get('/api/budgets/recommendations/:accountId',  (_req, res) => res.json([]));
-app.get('/api/budgets/anomalies/:accountId',        (_req, res) => res.json([]));
+app.get('/api/budgets/:accountId',                 (_req, res) => res.json({}));
+app.get('/api/budgets/activity/:accountId',        (_req, res) => res.json([]));
+app.get('/api/budgets/recommendations/:accountId', (_req, res) => res.json([]));
+app.get('/api/budgets/anomalies/:accountId',       (_req, res) => res.json([]));
 
 // ============================================
-// ROUTERS
+// ROUTERS — mounted AFTER inline routes
 // ============================================
 app.use('/api/reports', reportsRouter);
 app.use('/api/gcp',     gcpRouter);
-app.use('/api', apiRouter);
+app.use('/api',         apiRouter);
 
 // ============================================
-// FALLBACK — must be last
+// FALLBACK
 // ============================================
 app.use((_req: express.Request, res: express.Response) =>
   res.status(404).json({ error: 'Not Found' })
@@ -1049,35 +1043,36 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // BOOT
 // ============================================
 async function start() {
-  await initDB();
+  try {
+    await initDB();
+  } catch (e: any) {
+    console.warn('⚠️  DB init failed, continuing without DB:', e.message);
+  }
+
   const dates = getDateRanges();
   const server = app.listen(PORT, () => {
     console.log('='.repeat(60));
     console.log('🚀 CloudGuard Pro');
     console.log(`📡 http://localhost:${PORT}`);
     console.log(`📅 Current month: ${dates.currentMonthStart} → ${dates.currentMonthEnd}`);
-    console.log(`📅 Last month:    ${dates.lastMonthStart} → ${dates.lastMonthEnd}`);
-    console.log(`🔥 Next Azure Nuke: ${getNextFriday6pm().toISOString()}`);
     console.log(`📦 Accounts loaded: ${connectedAccounts.length}`);
-    console.log(`🤖 ChatBot: ${process.env.OPENAI_API_KEY ? '✅ OpenAI ready' : '⚠️  OPENAI_API_KEY not set'}`);
+    console.log(`🤖 ChatBot: ${process.env.ANTHROPIC_API_KEY ? '✅ Anthropic ready' : process.env.OPENAI_API_KEY ? '✅ OpenAI ready' : '⚠️  No AI key set'}`);
     console.log('='.repeat(60));
 
-    // ── Nuke Scheduler ───────────────────────────────────────────────────────
-    // Runs every hour to check for due scheduled nukes and send notification emails.
-    // If a NukeConfig has nextRunAt <= now and mode = AUTOMATIC, it will:
-    //   • Send notification emails to configured recipients
-    //   • Execute the live nuke and record results in NukeRun table
-    //   • Clear nextRunAt so it doesn't re-trigger until manually rescheduled
     cron.schedule('0 * * * *', async () => {
       console.log('[cron] Running nuke schedule check...');
-      await checkNukeSchedules();
+      try { await checkNukeSchedules(); } catch (e: any) { console.warn('[cron] nuke check failed:', e.message); }
     });
     console.log('[cron] Nuke scheduler registered — runs every hour');
   });
 
   server.on('error', (error: any) => {
-    if (error.code === 'EADDRINUSE') { console.error(`❌ Port ${PORT} already in use — kill the other process first`); process.exit(1); }
+    if (error.code === 'EADDRINUSE') { console.error(`❌ Port ${PORT} already in use`); process.exit(1); }
+    else { console.error('Server error:', error); process.exit(1); }
   });
 }
 
-start();
+start().catch(e => {
+  console.error('❌ Fatal startup error:', e);
+  process.exit(1);
+});
