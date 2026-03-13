@@ -230,6 +230,31 @@ app.get('/api/cloud/accounts/:accountId', (req, res) => {
 });
 
 // ============================================
+// DELETE ACCOUNT
+// ============================================
+app.delete('/api/cloud/accounts/:accountId', async (req, res) => {
+  const { accountId } = req.params;
+  const account = connectedAccounts.find(a => a.id === accountId);
+  if (!account) return res.status(404).json({ error: 'Account not found' });
+
+  // Remove from in-memory store
+  connectedAccounts = connectedAccounts.filter(a => a.id !== accountId);
+
+  // Remove from DB if available
+  if (prisma) {
+    try {
+      await prisma.cloudAccount.delete({ where: { id: accountId } });
+      console.log(`✅ Account deleted from DB: ${account.accountName}`);
+    } catch (e: any) {
+      console.warn('⚠️  DB delete failed (may not exist):', e.message);
+    }
+  }
+
+  console.log(`🗑️  Account removed: ${account.accountName} (${account.provider})`);
+  res.json({ message: `Account "${account.accountName}" deleted successfully` });
+});
+
+// ============================================
 // CONNECT AWS
 // ============================================
 app.post('/api/cloud/accounts/aws/connect', async (req, res) => {
@@ -1050,7 +1075,7 @@ async function start() {
   }
 
   const dates = getDateRanges();
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('='.repeat(60));
     console.log('🚀 CloudGuard Pro');
     console.log(`📡 http://localhost:${PORT}`);
