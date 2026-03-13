@@ -13,7 +13,7 @@ const CG_EXTERNAL_ID = process.env.CLOUDGUARD_EXTERNAL_ID || 'cloudguard-secure-
 
 // ─── GET /api/onboarding/template/aws ─────────────────────────────────────────
 // Returns a CloudFormation YAML template for download
-router.get('/template/aws', authenticateToken, (req: Request, res: Response) => {
+router.get('/template/aws', (req: Request, res: Response) => {
   const template = `AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   CloudGuard Pro - Read-only access role for cloud cost management and security monitoring.
@@ -68,7 +68,7 @@ Outputs:
 
 // ─── GET /api/onboarding/template/azure ───────────────────────────────────────
 // Returns an Azure CLI script for download
-router.get('/template/azure', authenticateToken, (req: Request, res: Response) => {
+router.get('/template/azure', (req: Request, res: Response) => {
   const script = `#!/bin/bash
 # CloudGuard Pro - Azure Onboarding Script
 # Run this in Azure Cloud Shell or local Azure CLI
@@ -126,7 +126,7 @@ echo "⚠️  Save the Client Secret now - it won't be shown again!"
 
 // ─── GET /api/onboarding/template/gcp ─────────────────────────────────────────
 // Returns a GCP shell script for download
-router.get('/template/gcp', authenticateToken, (req: Request, res: Response) => {
+router.get('/template/gcp', (req: Request, res: Response) => {
   const script = `#!/bin/bash
 # CloudGuard Pro - GCP Onboarding Script
 # Run this in Google Cloud Shell or local gcloud CLI
