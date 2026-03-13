@@ -35,7 +35,7 @@ const Login: React.FC = () => {
 
       // Save access token and user data
       localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('user', JSON.stringify({ ...data.user, onboardingComplete: true }));
 
       console.log('Saved to localStorage:', {
         accessToken: data.accessToken,
@@ -43,10 +43,10 @@ const Login: React.FC = () => {
       });
 
       // Check if MFA is enabled
-      if (!data.user.mfaEnabled) {
+      if (false) {
         navigate('/setup-mfa', { state: { firstLogin: true } });
       } else {
-        navigate('/verify-mfa', { state: { email: formData.email } });
+        navigate("/dashboard");
       }
     } catch (err: any) {
       console.error('Login error:', err);
