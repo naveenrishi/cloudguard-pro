@@ -19,7 +19,7 @@ import billingRoutes      from './billing.routes';
 import automationRoutes   from './automation.routes';
 import chatRoutes from './chat.routes';
 import reportsRoutes from './reports.routes';
-import onboardingRoutes from './onboarding.routes';
+
 
 const router = Router();
 
@@ -42,6 +42,6 @@ router.use('/billing',        billingRoutes);     // /api/billing/...
 router.use('/automation',     automationRoutes);  // /api/automation/execute
 router.use('/chat',           chatRoutes);       // /api/chat/message
 router.use('/reports',        reportsRoutes);
-router.use('/onboarding', onboardingRoutes);
+
 
 export default router;
