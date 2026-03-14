@@ -86,7 +86,13 @@ async function collectAsync<T>(iter: AsyncIterable<T>): Promise<T[]> {
 }
 
 function getCredentials(account: StoredAccount): any {
-  try { return JSON.parse(decrypt(account.encryptedCreds)); } catch (e) { return {}; }
+  const raw = account.encryptedCreds;
+  if (!raw) return {};
+  // Try decryption first (accounts saved via old connect flow)
+  try { return JSON.parse(decrypt(raw)); } catch (_) {}
+  // Fall back to plain JSON (accounts saved via new onboarding flow)
+  try { return JSON.parse(raw); } catch (_) {}
+  return {};
 }
 
 function fixGCPKey(creds: any): any {
