@@ -19,7 +19,7 @@ import {
   ArrowUpRight, ArrowDownRight, RefreshCw, ChevronRight,
   Shield, Activity, BarChart3, MoreHorizontal,
   Users, Layers, TrendingUp, Box,
-  CheckCircle, Filter, Trash2, Loader2, X,
+  CheckCircle, Filter,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, Cell,
@@ -99,87 +99,6 @@ const CardHeader: React.FC<{ title: string; subtitle?: string; badge?: React.Rea
     </div>
   </div>
 );
-
-// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
-const DeleteModal: React.FC<{
-  account: { id: string; accountName: string; provider: string } | null;
-  onCancel: () => void;
-  onConfirm: (id: string) => Promise<void>;
-}> = ({ account, onCancel, onConfirm }) => {
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-
-  if (!account) return null;
-
-  const pm = PROV_META[(account.provider||'').toLowerCase()] || PROV_META.aws;
-
-  const handle = async () => {
-    setLoading(true); setError('');
-    try { await onConfirm(account.id); }
-    catch (e: any) { setError(e.message); setLoading(false); }
-  };
-
-  return (
-    <div
-      onClick={() => !loading && onCancel()}
-      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:20 }}
-    >
-      <div onClick={e => e.stopPropagation()}
-        style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,0.18)' }}
-      >
-        {/* Header */}
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div style={{ width:42, height:42, borderRadius:12, background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <AlertTriangle size={22} color="#ef4444" />
-            </div>
-            <div>
-              <h3 style={{ fontSize:16, fontWeight:700, color:'#111827', margin:0 }}>Delete Account</h3>
-              <p style={{ fontSize:12, color:'#9ca3af', margin:'2px 0 0' }}>This action cannot be undone</p>
-            </div>
-          </div>
-          <button onClick={onCancel} disabled={loading} style={{ background:'none', border:'none', cursor:'pointer', padding:4, color:'#9ca3af' }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Account info */}
-        <div style={{ background:'#f8f9fa', border:'1px solid #e5e7eb', borderRadius:12, padding:'12px 16px', marginBottom:16 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <span style={{ fontSize:20 }}>{pm.emoji}</span>
-            <div>
-              <p style={{ fontSize:14, fontWeight:600, color:'#111827', margin:0 }}>{account.accountName}</p>
-              <p style={{ fontSize:12, color:'#6b7280', margin:'2px 0 0' }}>{pm.label} Account</p>
-            </div>
-          </div>
-        </div>
-
-        <p style={{ fontSize:13, color:'#6b7280', lineHeight:1.6, margin:'0 0 16px' }}>
-          Removing this account will disconnect CloudGuard Pro from your {pm.label} environment.
-          Your actual cloud resources will <strong style={{ color:'#111827' }}>not</strong> be affected.
-        </p>
-
-        {error && (
-          <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'8px 12px', marginBottom:12, fontSize:12, color:'#dc2626' }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ display:'flex', gap:10 }}>
-          <button onClick={onCancel} disabled={loading}
-            style={{ flex:1, padding:'10px 0', borderRadius:10, border:'1.5px solid #e5e7eb', background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:loading?'not-allowed':'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={handle} disabled={loading}
-            style={{ flex:1, padding:'10px 0', borderRadius:10, border:'none', background:loading?'#fca5a5':'#ef4444', color:'#fff', fontSize:13, fontWeight:600, cursor:loading?'not-allowed':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-            {loading ? <Loader2 size={14} className="animate-spin"/> : <Trash2 size={14}/>}
-            {loading ? 'Deleting…' : 'Yes, Delete'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ─── Optimization data builders ───────────────────────────────────────────────
 function buildDashboardOptimizations(
@@ -279,10 +198,10 @@ const DashboardOptimizationWidget: React.FC<{
     const fetchForAccount = async (acc: { id:string; accountName:string; provider:string }): Promise<OptRec[]> => {
       const p = (acc.provider || '').toLowerCase();
       const endpoints = p === 'azure'
-        ? [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/azure/advisor/${acc.id}`,
-           `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${acc.id}/optimizations`]
-        : [`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/aws/optimizations/${acc.id}`,
-           `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${acc.id}/optimizations`];
+        ? [`http://localhost:3000/api/azure/advisor/${acc.id}`,
+           `http://localhost:3000/api/cloud/accounts/${acc.id}/optimizations`]
+        : [`http://localhost:3000/api/aws/optimizations/${acc.id}`,
+           `http://localhost:3000/api/cloud/accounts/${acc.id}/optimizations`];
 
       for (const url of endpoints) {
         try {
@@ -516,7 +435,6 @@ const NewDashboard: React.FC = () => {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [refreshed,         setRefreshed]         = useState(new Date());
   const [loading,           setLoading]           = useState(true);
-  const [deleteTarget,      setDeleteTarget]      = useState<{ id: string; accountName: string; provider: string } | null>(null);
 
   const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
   const [accountDashboards, setAccountDashboards] = useState<AccountDashboard[]>([]);
@@ -535,14 +453,14 @@ const NewDashboard: React.FC = () => {
   const fetchAccountData = async () => {
     setLoading(true);
     try {
-      const accRes  = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/`, { headers: hdrs });
+      const accRes  = await fetch(`http://localhost:3000/api/cloud/accounts/`, { headers: hdrs });
       const accData = await accRes.json();
       const accs    = Array.isArray(accData) ? accData : (accData.accounts || []);
       setConnectedAccounts(accs);
       if (accs.length > 0) {
         const results = await Promise.allSettled(
           accs.map((a: any) =>
-            fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/dashboard/${a.id}`, { headers: hdrs })
+            fetch(`http://localhost:3000/api/cloud/dashboard/${a.id}`, { headers: hdrs })
               .then(r => r.json())
               .then(d => ({ ...d, id: a.id, accountName: a.accountName, provider: a.provider, region: a.region }))
           )
@@ -554,8 +472,8 @@ const NewDashboard: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  const fetchCloudStatus    = async () => { try { const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/status`, { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
-  const fetchVersionUpdates = async () => { try { const r = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/health/version-updates`, { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
+  const fetchCloudStatus    = async () => { try { const r = await fetch('http://localhost:3000/api/health/status', { headers: hdrs }); if (r.ok) setCloudStatus(await r.json()); } catch {} };
+  const fetchVersionUpdates = async () => { try { const r = await fetch('http://localhost:3000/api/health/version-updates', { headers: hdrs }); setVersionUpdates(r.ok ? await r.json() : { aws:[], azure:[], gcp:[] }); } catch { setVersionUpdates({ aws:[], azure:[], gcp:[] }); } };
 
   useEffect(() => {
     fetchAccountData(); fetchCloudStatus(); fetchVersionUpdates();
@@ -563,20 +481,6 @@ const NewDashboard: React.FC = () => {
     const t2 = setInterval(fetchVersionUpdates, 300000);
     return () => { clearInterval(t1); clearInterval(t2); };
   }, []);
-
-  // ── DELETE ACCOUNT ────────────────────────────────────────────────────────
-  const handleDeleteAccount = async (accountId: string) => {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/cloud/accounts/${accountId}`,
-      { method: 'DELETE', headers: hdrs }
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete account');
-    setDeleteTarget(null);
-    // Remove from local state immediately without full refetch
-    setConnectedAccounts(prev => prev.filter(a => a.id !== accountId));
-    setAccountDashboards(prev => prev.filter(d => d.id !== accountId));
-  };
 
   // ── DERIVED DATA ──────────────────────────────────────────────────────────
   const filtered = activeProvider === 'all'
@@ -645,13 +549,6 @@ const NewDashboard: React.FC = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <MainLayout>
-      {/* ── DELETE MODAL ──────────────────────────────────────────────────── */}
-      <DeleteModal
-        account={deleteTarget}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteAccount}
-      />
-
       <CloudProviderSelector isOpen={showProviderModal} onClose={() => setShowProviderModal(false)}/>
 
       <CloudStatusBanner
@@ -928,8 +825,8 @@ const NewDashboard: React.FC = () => {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50/60">
-                  {['Account','Provider','Region','This Month','Last Month','Change','Resources','Security',''].map((h,i) => (
-                    <th key={i} className={`text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-5 py-3 ${i===0?'text-left':'text-center'}`}>{h}</th>
+                  {['Account','Provider','Region','This Month','Last Month','Change','Resources','Security'].map((h,i) => (
+                    <th key={h} className={`text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-5 py-3 ${i===0?'text-left':'text-center'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -974,16 +871,6 @@ const NewDashboard: React.FC = () => {
                             <span className="text-xs font-bold tabular-nums" style={{ color:sc }}>{dash.securityScore}</span>
                           </div>
                         ) : <span className="text-gray-200 block text-center">—</span>}
-                      </td>
-                      {/* ── DELETE BUTTON ── */}
-                      <td className="px-3 py-3.5 text-center">
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeleteTarget({ id: acc.id, accountName: acc.accountName, provider: acc.provider }); }}
-                          title="Delete account"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-red-100 bg-red-50 hover:bg-red-100 hover:border-red-300 mx-auto"
-                        >
-                          <Trash2 size={13} className="text-red-400 hover:text-red-600"/>
-                        </button>
                       </td>
                     </tr>
                   );
