@@ -218,9 +218,25 @@ app.post('/api/chat', async (req, res) => {
 // ============================================
 // ACCOUNTS
 // ============================================
-app.get('/api/cloud/accounts', (_req, res) =>
-  res.json(connectedAccounts.map(({ encryptedCreds, ...acc }) => acc))
-);
+app.get('/api/cloud/accounts', async (_req, res) => {
+  if (prisma) {
+    try {
+      const dbAccounts = await prisma.cloudAccount.findMany();
+      for (const acc of dbAccounts) {
+        if (!connectedAccounts.find((a: any) => a.id === acc.id)) {
+          connectedAccounts.push({
+            id: acc.id, accountName: acc.accountName, accountId: acc.accountId,
+            provider: acc.provider as any,
+            region: acc.region || undefined, status: 'Active',
+            createdAt: acc.createdAt.toISOString(), isDemo: false,
+            encryptedCreds: acc.credentials || '',
+          });
+        }
+      }
+    } catch (e) {}
+  }
+  res.json(connectedAccounts.map(({ encryptedCreds, ...acc }: any) => acc));
+});
 
 app.get('/api/cloud/accounts/:accountId', (req, res) => {
   const account = connectedAccounts.find(a => a.id === req.params.accountId);
